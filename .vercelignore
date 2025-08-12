@@ -1,0 +1,44 @@
+node_modules
+build
+dist
+.git
+.trae
+.log
+
+# 排除根目录下的脚本文件，避免被识别为Serverless Functions
+*.js
+*.cjs
+*.mjs
+
+# 只允许必要的配置文件
+!vite.config.js
+!tailwind.config.js
+!postcss.config.js
+!eslint.config.js
+
+# 只允许 api 目录下的文件作为 Serverless Functions
+!api/index.js
+!api/index.ts
+
+# 明确排除所有测试和工具脚本
+add-*.js
+assign-*.js
+check-*.js
+clear-*.js
+create-*.js
+fix-*.js
+insert-*.js
+reset-*.js
+setup-*.js
+test-*.js
+verify-*.js
+scripts/
+
+# 排除其他可能的脚本文件
+*.test.js
+*.spec.js
+*.config.js
+!vite.config.js
+!tailwind.config.js
+!postcss.config.js
+!eslint.config.js
