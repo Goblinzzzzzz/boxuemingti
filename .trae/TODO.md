@@ -1,7 +1,7 @@
 # TODO:
 
-- [x] todo_175: 分析项目根目录下所有 .js 文件 - 识别哪些文件被 Vercel 错误识别为 Serverless Functions (priority: High)
-- [x] todo_176: 检查当前 .vercelignore 配置 - 确认哪些文件需要被排除 (priority: High)
-- [x] todo_177: 优化 .vercelignore 配置 - 添加所有测试脚本和工具脚本到忽略列表 (priority: High)
-- [x] todo_178: 验证 API 架构 - 确认只有 /api/index 作为单一入口点 (priority: Medium)
-- [x] todo_179: 测试优化后的配置 - 确保函数数量符合 Vercel 免费计划限制 (priority: Medium)
+- [x] todo_180: 分析 Vercel 构建错误 - TypeScript 编译器未找到的根本原因 (priority: High)
+- [x] todo_181: 检查当前 vercel.json 配置文件的构建设置 (priority: High)
+- [x] todo_182: 更新 vercel.json 添加正确的 Vite 框架配置 (priority: High)
+- [x] todo_183: 配置正确的构建命令、输出目录和安装命令 (priority: High)
+- [x] todo_184: 测试修复后的构建配置是否能解决 tsc 命令未找到的问题 (priority: Medium)
