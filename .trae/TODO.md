@@ -1,7 +1,8 @@
 # TODO:
 
-- [x] todo_180: 分析 Vercel 构建错误 - TypeScript 编译器未找到的根本原因 (priority: High)
-- [x] todo_181: 检查当前 vercel.json 配置文件的构建设置 (priority: High)
-- [x] todo_182: 更新 vercel.json 添加正确的 Vite 框架配置 (priority: High)
-- [x] todo_183: 配置正确的构建命令、输出目录和安装命令 (priority: High)
-- [x] todo_184: 测试修复后的构建配置是否能解决 tsc 命令未找到的问题 (priority: Medium)
+- [x] todo_188: 在API入口文件中添加详细的错误日志和环境变量验证 (priority: High)
+- [x] todo_189: 增强登录API的错误处理，提供更清晰的错误信息 (priority: High)
+- [x] todo_190: 为所有关键环境变量添加默认值或验证逻辑 (priority: High)
+- [x] todo_191: 改进健康检查接口的错误处理 (priority: Medium)
+- [x] todo_192: 测试修复后的代码确保在生产环境中正常运行 (priority: Medium)
+- [ ] todo_193: 自动部署到Vercel并验证修复效果 (**IN PROGRESS**) (priority: High)

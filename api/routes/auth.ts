@@ -111,17 +111,22 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
  * POST /api/auth/login
  */
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  const startTime = Date.now();
   try {
+    console.log(`[${new Date().toISOString()}] 登录请求开始`);
     const { email, password, remember_me = false } = req.body;
 
     // 验证必填字段
     if (!email || !password) {
+      console.log('登录失败: 缺少必填字段');
       res.status(400).json({
         success: false,
         message: '邮箱和密码为必填字段'
       });
       return;
     }
+
+    console.log(`尝试登录用户: ${email}`);
 
     // 查找用户
     const { data: user, error: userError } = await supabase
@@ -130,7 +135,18 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       .eq('email', email)
       .single();
 
-    if (userError || !user) {
+    if (userError) {
+      console.error('数据库查询用户失败:', userError);
+      res.status(500).json({
+        success: false,
+        message: '数据库查询失败',
+        error: userError.message
+      });
+      return;
+    }
+
+    if (!user) {
+      console.log(`用户不存在: ${email}`);
       res.status(401).json({
         success: false,
         message: '邮箱或密码错误'
@@ -139,16 +155,21 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 验证密码
+    console.log('验证用户密码...');
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
+      console.log(`密码验证失败: ${email}`);
       res.status(401).json({
         success: false,
         message: '邮箱或密码错误'
       });
       return;
     }
+    
+    console.log('密码验证成功');
 
     // 检查用户状态
+    console.log(`检查用户状态: ${user.status}`);
     if (user.status !== 'active') {
       let message = '账户状态异常，无法登录';
       
@@ -166,6 +187,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
           message = '账户状态异常，无法登录';
       }
       
+      console.log(`用户状态检查失败: ${user.status} - ${message}`);
       res.status(403).json({
         success: false,
         message,
@@ -175,7 +197,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 获取用户角色
-    const { data: userRoles } = await supabase
+    console.log('获取用户角色...');
+    const { data: userRoles, error: roleError } = await supabase
       .from('user_roles')
       .select(`
         roles (
@@ -185,15 +208,31 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       `)
       .eq('user_id', user.id);
 
+    if (roleError) {
+      console.error('获取用户角色失败:', roleError);
+      // 继续执行，使用默认角色
+    }
+
     const roles = userRoles?.map((ur: any) => ur.roles.name) || ['user'];
+    console.log(`用户角色: ${roles.join(', ')}`);
 
     // 生成JWT token
+    console.log('生成JWT token...');
     const tokenPayload = {
       userId: user.id,
       email: user.email,
       name: user.name,
       roles
     };
+
+    if (!JWT_SECRET) {
+      console.error('JWT_SECRET 环境变量未设置');
+      res.status(500).json({
+        success: false,
+        message: '服务器配置错误'
+      });
+      return;
+    }
 
     const accessToken = jwt.sign(tokenPayload, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN
@@ -204,12 +243,23 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       JWT_SECRET,
       { expiresIn: remember_me ? REFRESH_TOKEN_EXPIRES_IN : '7d' }
     );
+    
+    console.log('JWT token 生成成功');
 
     // 更新最后登录时间
-    await supabase
+    console.log('更新最后登录时间...');
+    const { error: updateError } = await supabase
       .from('users')
       .update({ last_login_at: new Date().toISOString() })
       .eq('id', user.id);
+
+    if (updateError) {
+      console.error('更新最后登录时间失败:', updateError);
+      // 继续执行，不影响登录流程
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`登录成功，用时: ${duration}ms`);
 
     res.json({
       success: true,
@@ -225,10 +275,15 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    console.error('登录过程中发生错误:', error);
+    const duration = Date.now() - startTime;
+    console.error(`登录过程中发生错误 (用时: ${duration}ms):`, error);
+    console.error('错误堆栈:', error instanceof Error ? error.stack : 'No stack trace');
+    
     res.status(500).json({
       success: false,
-      message: '服务器内部错误'
+      message: '服务器内部错误',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
     });
   }
 });

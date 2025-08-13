@@ -19,7 +19,10 @@ import {
   PaginatedResponse
 } from '../types/auth';
 
-const API_BASE_URL = '/api';
+// 根据环境动态设置API基础URL
+const API_BASE_URL = import.meta.env.PROD 
+  ? '/api'  // 生产环境使用相对路径，由Vercel路由处理
+  : '/api'; // 开发环境也使用相对路径，由Vite代理处理
 
 // 创建 axios 实例
 const authApi = axios.create({
@@ -125,7 +128,15 @@ export class AuthService {
     return performanceMonitor.measureFunction('auth-login', async () => {
       try {
         console.log('开始登录请求:', credentials.email);
+        console.log('API基础URL:', API_BASE_URL);
+        console.log('完整请求URL:', `${API_BASE_URL}/auth/login`);
+        console.log('当前环境:', import.meta.env.MODE);
+        console.log('是否为生产环境:', import.meta.env.PROD);
+        
         const response: AxiosResponse<AuthResponse> = await this.api.post('/auth/login', credentials);
+        
+        console.log('登录响应状态:', response.status);
+        console.log('登录响应数据:', response.data);
         
         if (response.data.success && response.data.access_token) {
           console.log('登录成功，保存token');
@@ -148,10 +159,36 @@ export class AuthService {
         
         return response.data;
       } catch (error: any) {
-        console.error('登录请求失败:', error);
+        console.error('登录请求失败 - 详细错误信息:');
+        console.error('错误对象:', error);
+        console.error('错误消息:', error.message);
+        console.error('错误代码:', error.code);
+        console.error('请求配置:', error.config);
+        
+        if (error.response) {
+          console.error('响应状态:', error.response.status);
+          console.error('响应头:', error.response.headers);
+          console.error('响应数据:', error.response.data);
+        } else if (error.request) {
+          console.error('请求对象:', error.request);
+          console.error('网络错误或服务器无响应');
+        }
+        
+        let errorMessage = '登录失败，请稍后重试';
+        
+        if (error.code === 'NETWORK_ERROR' || error.code === 'ERR_NETWORK') {
+          errorMessage = '网络连接失败，请检查网络连接';
+        } else if (error.response?.status === 404) {
+          errorMessage = 'API接口未找到，请联系技术支持';
+        } else if (error.response?.status === 500) {
+          errorMessage = '服务器内部错误，请稍后重试';
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+        
         return {
           success: false,
-          message: error.response?.data?.message || error.message || '登录失败，请稍后重试'
+          message: errorMessage
         };
       }
     });
