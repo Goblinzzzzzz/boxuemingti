@@ -3,6 +3,9 @@
  */
 import express, { type Request, type Response } from 'express';
 import { supabase } from '../services/supabaseClient.js';
+import { vercelLogger } from '../vercel-logger.js';
+import { supabaseValidator } from '../supabase-validator.js';
+// import { debugHandler, healthCheck } from './debug.js';
 
 const router = express.Router();
 
@@ -10,60 +13,113 @@ const router = express.Router();
  * 主健康检查接口
  * GET /api/health
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
+  const requestLogger = vercelLogger.createRequestLogger(req);
+  const healthCheckId = requestLogger.getRequestId();
+  
   try {
-    const healthStatus = {
-      success: true,
-      message: 'API服务正常运行',
-      timestamp: new Date().toISOString(),
-      environment: {
-        nodeEnv: process.env.NODE_ENV || 'unknown',
-        port: process.env.PORT || 'unknown',
-        aiProvider: process.env.AI_PROVIDER || 'unknown',
-        vercelRegion: process.env.VERCEL_REGION || 'local'
-      },
-      services: {
-        supabase: {
-          configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
-          url: process.env.SUPABASE_URL ? '已配置' : '未配置',
-          serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? '已配置' : '未配置'
-        },
-        jwt: {
-          configured: !!process.env.JWT_SECRET,
-          status: process.env.JWT_SECRET ? '已配置' : '未配置'
-        }
-      },
-      validation: {
-        criticalServices: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.JWT_SECRET)
-      }
-    };
+    requestLogger.info('开始健康检查');
     
-    // 如果关键服务未配置，返回警告状态
-    if (!healthStatus.validation.criticalServices) {
-      healthStatus.success = false;
-      healthStatus.message = '部分关键服务未正确配置';
-      console.warn('⚠️ 健康检查发现配置问题:', healthStatus);
-      return res.status(503).json(healthStatus);
+    // 执行快速连接测试
+    const quickTest = await supabaseValidator.quickConnectionTest();
+    
+    if (!quickTest.success) {
+      requestLogger.error('快速连接测试失败', quickTest.details);
+      return res.status(503).json({
+        success: false,
+        status: 'unhealthy',
+        error: 'Quick connection test failed',
+        details: quickTest,
+        healthCheckId,
+        timestamp: new Date().toISOString()
+      });
     }
     
-    console.log('✅ 健康检查通过:', healthStatus.message);
-    res.status(200).json(healthStatus);
-  } catch (error) {
-    console.error('❌ 健康检查失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '健康检查失败',
-      error: error instanceof Error ? error.message : '未知错误',
-      timestamp: new Date().toISOString()
+    requestLogger.performance('quick_connection_test', quickTest.duration || 0);
+    requestLogger.info('快速连接测试通过');
+    
+    // 返回健康状态
+    res.json({
+      success: true,
+      status: 'healthy',
+      message: 'All systems operational',
+      details: {
+        connection: quickTest,
+        environment: process.env.VERCEL ? 'vercel' : 'local',
+        region: process.env.VERCEL_REGION || 'unknown',
+        nodeEnv: process.env.NODE_ENV || 'unknown'
+      },
+      performance: {
+        connectionTime: quickTest.duration || 0
+      },
+      healthCheckId,
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
     });
+  } catch (error) {
+    requestLogger.error('健康检查过程中发生错误', error);
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        status: 'error',
+        error: 'Health check failed',
+        details: error instanceof Error ? error.message : String(error),
+        healthCheckId,
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 });
 
 /**
- * 数据库连接测试接口
+ * 详细的数据库连接测试接口
  * GET /api/health/db
  */
 router.get('/db', async (req: Request, res: Response) => {
+  const requestLogger = vercelLogger.createRequestLogger(req);
+  const testId = requestLogger.getRequestId();
+  
+  try {
+    requestLogger.info('开始详细数据库测试');
+    
+    // 执行完整的 Supabase 验证
+    const validationReport = await supabaseValidator.validateComplete();
+    
+    requestLogger.performance('complete_validation', validationReport.performance.totalTime);
+    requestLogger.info(`详细数据库测试完成: ${validationReport.overall.success ? '通过' : '失败'}`);
+    
+    const statusCode = validationReport.overall.success ? 200 : 503;
+    
+    res.status(statusCode).json({
+      success: validationReport.overall.success,
+      status: validationReport.overall.success ? 'healthy' : 'unhealthy',
+      message: validationReport.overall.message,
+      validation: validationReport,
+      testId,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    requestLogger.error('详细数据库测试过程中发生错误', error);
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        status: 'error',
+        error: 'Database test failed',
+        details: error instanceof Error ? error.message : String(error),
+        testId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+});
+
+/**
+ * 原始数据库连接测试接口（保持向后兼容）
+ * GET /api/health/db/legacy
+ */
+router.get('/db/legacy', async (req: Request, res: Response) => {
   const testId = Date.now().toString(36);
   console.log(`[DB-TEST-${testId}] 开始数据库连接测试...`);
   
@@ -263,5 +319,17 @@ router.get('/db/status', async (req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * 详细的错误诊断接口
+ * GET /api/health/debug
+ */
+// router.get('/debug', debugHandler);
+
+/**
+ * 简化的健康检查接口
+ * GET /api/health/check
+ */
+// router.get('/check', healthCheck);
 
 export default router;

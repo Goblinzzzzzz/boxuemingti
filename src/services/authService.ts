@@ -20,7 +20,7 @@ import {
 } from '../types/auth';
 
 // 根据环境动态设置API基础URL
-const API_BASE_URL = import.meta.env.PROD 
+const API_BASE_URL = (import.meta as any).env.PROD 
   ? '/api'  // 生产环境使用相对路径，由Vercel路由处理
   : '/api'; // 开发环境也使用相对路径，由Vite代理处理
 
@@ -130,8 +130,8 @@ export class AuthService {
         console.log('开始登录请求:', credentials.email);
         console.log('API基础URL:', API_BASE_URL);
         console.log('完整请求URL:', `${API_BASE_URL}/auth/login`);
-        console.log('当前环境:', import.meta.env.MODE);
-        console.log('是否为生产环境:', import.meta.env.PROD);
+        console.log('当前环境:', (import.meta as any).env.MODE);
+        console.log('是否为生产环境:', (import.meta as any).env.PROD);
         
         const response: AxiosResponse<AuthResponse> = await this.api.post('/auth/login', credentials);
         

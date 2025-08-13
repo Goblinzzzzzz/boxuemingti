@@ -1,18 +1,30 @@
 import express, { type Request, type Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabaseClient.js';
 import { questionReviewService } from '../services/questionReviewService';
+import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization.js';
+import { optimizeMemoryUsage } from '../vercel-compatibility.js';
 
 const router = express.Router();
 
-// 初始化Supabase客户端
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://pnjibotdkfdvtfgqqakg.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuamlib3Rka2ZkdnRmZ3FxYWtnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDM2MzgyNiwiZXhwIjoyMDY5OTM5ODI2fQ.5WHYnrvY278MYatfm5hq1G7mspdp8ADNgDH1B-klzsM'
-);
+// Vercel 环境检测和优化
+if (process.env.VERCEL) {
+  console.log('🔍 试题路由 - Vercel 环境检测');
+  logMemoryUsage('试题路由初始化');
+}
 
 // 获取试题列表（支持筛选和分页）
 router.get('/', async (req: Request, res: Response) => {
+  const queryId = Date.now().toString(36);
+  const monitor = new PerformanceMonitor(`试题列表查询-${queryId}`);
+  
   try {
+    console.log(`[QUESTIONS-${queryId}] 开始获取试题列表...`);
+    monitor.checkpoint('请求开始');
+    
+    // Vercel 环境内存优化
+    if (process.env.VERCEL) {
+      optimizeMemoryUsage();
+    }
     const {
       page = 1,
       limit = 20,
@@ -81,17 +93,38 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('获取试题列表失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '获取试题列表失败'
-    });
+    console.error(`[QUESTIONS-${queryId}] 获取试题列表失败:`, error);
+    enhancedErrorHandler(error, `试题列表查询-${queryId}`);
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: '获取试题列表失败',
+        queryId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } finally {
+    // 内存清理
+    if (process.env.VERCEL) {
+      optimizeMemoryUsage();
+    }
   }
 });
 
 // 获取试题统计信息
 router.get('/stats', async (req: Request, res: Response) => {
+  const statsId = Date.now().toString(36);
+  const monitor = new PerformanceMonitor(`试题统计-${statsId}`);
+  
   try {
+    console.log(`[STATS-${statsId}] 开始获取试题统计信息...`);
+    monitor.checkpoint('请求开始');
+    
+    // Vercel 环境内存优化
+    if (process.env.VERCEL) {
+      optimizeMemoryUsage();
+    }
     // 总试题数
     const { count: totalQuestions } = await supabase
       .from('questions')
@@ -143,11 +176,22 @@ router.get('/stats', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('获取统计信息失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '获取统计信息失败'
-    });
+    console.error(`[STATS-${statsId}] 获取统计信息失败:`, error);
+    enhancedErrorHandler(error, `试题统计-${statsId}`);
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: '获取统计信息失败',
+        statsId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } finally {
+    // 内存清理
+    if (process.env.VERCEL) {
+      optimizeMemoryUsage();
+    }
   }
 });
 

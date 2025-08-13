@@ -105,14 +105,21 @@ const envValidationResult = validateEnvironment();
 
 import express, { type Request, type Response, type NextFunction }  from 'express';
 import cors from 'cors';
-import authRoutes from './routes/auth.js';
-import materialsRoutes from './routes/materials.js';
-import generationRoutes from './routes/generation.js';
-import questionsRoutes from './routes/questions.js';
-import reviewRoutes from './routes/review.js';
-import usersRoutes from './routes/users.js';
-import systemRoutes from './routes/system.js';
-import healthRoutes from './routes/health.js';
+import authRoutes from './routes/auth';
+import materialsRoutes from './routes/materials';
+import generationRoutes from './routes/generation';
+import questionsRoutes from './routes/questions';
+import reviewRoutes from './routes/review';
+import usersRoutes from './routes/users';
+import systemRoutes from './routes/system';
+import healthRoutes from './routes/health';
+import logsRoutes from './routes/logs';
+import debugRoutes from './routes/debug';
+import { addRequestLog } from './routes/logs';
+import compatibilityRoutes from './routes/compatibility';
+import deploymentRoutes from './routes/deployment';
+import { simpleTest } from './routes/simple-test';
+import { envCheckHandler, quickEnvCheck } from './routes/env-check';
 
 
 const app: express.Application = express();
@@ -137,7 +144,41 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 添加请求日志中间件
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substr(2, 9);
+  
+  // 添加请求ID到请求对象
+  (req as any).requestId = requestId;
+  
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} [${requestId}]`);
+  
+  // 记录请求开始
+  addRequestLog({
+    level: 'info',
+    event: 'request_start',
+    method: req.method,
+    endpoint: req.path,
+    requestId,
+    userAgent: req.headers['user-agent'],
+    ip: req.ip || req.connection.remoteAddress,
+    query: req.query,
+    body: req.method === 'POST' || req.method === 'PUT' ? req.body : undefined
+  });
+  
+  // 监听响应结束
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    addRequestLog({
+      level: res.statusCode >= 400 ? 'error' : 'info',
+      event: 'request_end',
+      method: req.method,
+      endpoint: req.path,
+      requestId,
+      statusCode: res.statusCode,
+      duration
+    });
+  });
+  
   next();
 });
 
@@ -152,6 +193,17 @@ app.use('/api/review', reviewRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/logs', logsRoutes);
+app.use('/api/debug', debugRoutes);
+app.use('/api/compatibility', compatibilityRoutes);
+app.use('/api/deployment', deploymentRoutes);
+
+// 环境变量检查接口
+app.get('/api/env-check', envCheckHandler);
+app.get('/api/env-check/quick', quickEnvCheck);
+
+// 简单测试接口
+app.get('/api/simple-test', simpleTest);
 
 // 健康检查路由已移动到 /api/health 路由文件中
 
@@ -160,8 +212,9 @@ app.use('/api/health', healthRoutes);
  */
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
   const errorId = Date.now().toString(36);
+  const requestId = (req as any).requestId || 'unknown';
   
-  console.error(`[ERROR-${errorId}] 全局错误处理器捕获到错误:`, {
+  const errorDetails = {
     error: error.message,
     stack: error.stack,
     path: req.path,
@@ -172,6 +225,24 @@ app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
     timestamp: new Date().toISOString(),
     vercelRegion: process.env.VERCEL_REGION || 'unknown',
     nodeEnv: process.env.NODE_ENV || 'unknown'
+  };
+  
+  console.error(`[ERROR-${errorId}] 全局错误处理器捕获到错误:`, errorDetails);
+  
+  // 添加错误日志到追踪系统
+  addRequestLog({
+    level: 'error',
+    event: 'global_error',
+    method: req.method,
+    endpoint: req.path,
+    requestId,
+    errorId,
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    },
+    errorDetails
   });
   
   // 检查是否是特定类型的错误

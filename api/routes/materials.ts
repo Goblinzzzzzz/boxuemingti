@@ -1,16 +1,32 @@
 import express, { type Request, type Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabaseClient.js';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
-import * as mammoth from 'mammoth';
+import { 
+  parseDocumentVercelCompatible, 
+  optimizeMemoryUsage, 
+  getVercelOptimizationSuggestions,
+  checkDependencyCompatibility 
+} from '../vercel-compatibility.js';
+import { PerformanceMonitor, enhancedErrorHandler } from '../vercel-optimization.js';
+
+// 设置环境变量防止 pdf-parse 进入调试模式
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
 const router = express.Router();
 
-// 初始化Supabase客户端
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://pnjibotdkfdvtfgqqakg.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuamlib3Rka2ZkdnRmZ3FxYWtnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDM2MzgyNiwiZXhwIjoyMDY5OTM5ODI2fQ.5WHYnrvY278MYatfm5hq1G7mspdp8ADNgDH1B-klzsM'
-);
+// 在模块加载时检查依赖兼容性
+if (process.env.VERCEL) {
+  console.log('🔍 材料路由 - Vercel 环境检测');
+  const { issues, warnings } = checkDependencyCompatibility();
+  
+  if (issues.length > 0) {
+    console.error('❌ 材料路由依赖问题:', issues);
+  }
+  
+  if (warnings.length > 0) {
+    console.warn('⚠️ 材料路由依赖警告:', warnings);
+  }
+}
 
 // 配置multer用于文件上传
 const storage = multer.memoryStorage();
@@ -50,139 +66,89 @@ const upload = multer({
 
 // 上传教材文件
 router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+  const uploadId = Date.now().toString(36);
+  const monitor = new PerformanceMonitor(`文件上传-${uploadId}`);
+  
   try {
-    console.log('开始处理文件上传请求...');
+    console.log(`[UPLOAD-${uploadId}] 开始处理文件上传请求...`);
+    monitor.checkpoint('请求开始');
+    
+    // Vercel 环境优化检查
+    if (process.env.VERCEL) {
+      const suggestions = getVercelOptimizationSuggestions();
+      if (suggestions.length > 0) {
+        console.log(`[UPLOAD-${uploadId}] Vercel 优化建议:`, suggestions);
+      }
+    }
     
     if (!req.file) {
-      console.log('错误：没有文件被上传');
+      console.log(`[UPLOAD-${uploadId}] 错误：没有文件被上传`);
       return res.status(400).json({
         success: false,
-        error: '请选择要上传的文件'
+        error: '请选择要上传的文件',
+        uploadId
       });
     }
 
     const { originalname, mimetype, buffer } = req.file;
     const { title } = req.body;
     
-    console.log(`文件信息: 名称=${originalname}, 类型=${mimetype}, 大小=${buffer.length}字节`);
+    console.log(`[UPLOAD-${uploadId}] 文件信息: 名称=${originalname}, 类型=${mimetype}, 大小=${buffer.length}字节`);
+    monitor.checkpoint('文件信息获取');
 
-    // 文本提取
+    // 文本提取 - 使用 Vercel 兼容的解析方法
     let content = '';
     try {
+      console.log(`[UPLOAD-${uploadId}] 开始文本提取...`);
+      monitor.checkpoint('文本提取开始');
+      
+      // 内存使用检查
+      optimizeMemoryUsage();
+      
       // 获取文件扩展名
       const fileExtension = originalname.toLowerCase().substring(originalname.lastIndexOf('.'));
       
       if (mimetype === 'text/plain' || fileExtension === '.txt') {
         // 处理纯文本文件
         content = buffer.toString('utf-8');
-        console.log(`成功解析文本文件: ${originalname}, 提取了 ${content.length} 个字符`);
+        console.log(`[UPLOAD-${uploadId}] 成功解析文本文件: ${originalname}, 提取了 ${content.length} 个字符`);
       } else if (mimetype === 'application/pdf' || fileExtension === '.pdf') {
-        // 处理PDF文件
-        try {
-          console.log(`开始解析PDF文件: ${originalname}, 大小: ${buffer.length} 字节`);
-          
-          // 检查文件名是否包含中文（可能导致编码问题）
-          const hasChinese = /[\u4e00-\u9fa5]/.test(originalname);
-          if (hasChinese) {
-            console.warn(`警告: PDF文件名 ${originalname} 包含中文字符，可能导致编码问题`);
-          }
-          
-          // 检查PDF文件头部标记
-          const pdfHeader = buffer.slice(0, 5).toString();
-          if (pdfHeader !== '%PDF-') {
-            console.warn(`警告: 文件 ${originalname} 可能不是有效的PDF文件，头部标记不匹配: ${pdfHeader}`);
-          }
-          
-          // 使用更多配置选项解析PDF
-          const pdfData = await pdfParse(buffer, {
-            // 设置PDF解析选项
-            max: 0 // 不限制页数
-            // 移除version配置，使用默认版本
-            // 移除pagerender配置，使用默认渲染方式
-          });
-          
-          content = pdfData.text || '';
-          console.log(`成功解析PDF文件: ${originalname}, 提取了 ${content.length} 个字符`);
-          
-          // 检查内容是否包含乱码
-          const invalidChars = (content.match(/�/g) || []).length;
-          if (invalidChars > 0) {
-            console.warn(`警告: PDF文件 ${originalname} 存在编码问题，包含 ${invalidChars} 个乱码字符`);
-            
-            // 尝试清理乱码字符
-            const cleanedContent = content.replace(/�/g, '');
-            if (cleanedContent.length > content.length * 0.7) { // 如果清理后内容保留了70%以上
-              console.log(`已清理乱码字符，原始长度: ${content.length}，清理后长度: ${cleanedContent.length}`);
-              content = cleanedContent;
-            }
-          }
-          
-          // 检查内容是否为空或过短
-          if (content.length < 50) {
-            console.warn(`警告: PDF文件 ${originalname} 提取的内容过短，可能解析失败`);
-          }
-        } catch (pdfError) {
-          console.error(`PDF解析错误: ${originalname}`, pdfError);
-          console.error(`PDF错误详情: ${pdfError instanceof Error ? pdfError.message : '未知错误'}`);
-          console.error(`PDF错误堆栈: ${pdfError instanceof Error ? pdfError.stack : '无堆栈信息'}`);
-          throw new Error(`PDF解析失败: ${pdfError instanceof Error ? pdfError.message : '未知错误'}`); // 包含更详细的错误信息
-        }
+        // 使用 Vercel 兼容的 PDF 解析
+        content = await parseDocumentVercelCompatible(buffer, 'pdf');
+        console.log(`[UPLOAD-${uploadId}] 成功解析PDF文件: ${originalname}, 提取了 ${content.length} 个字符`);
       } else if (mimetype === 'application/msword' || 
                  mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
                  fileExtension === '.doc' || fileExtension === '.docx') {
-        // 处理Word文档
-        try {
-          console.log(`开始处理Word文档: ${originalname}, 大小: ${buffer.length} 字节`);
-          
-          if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            // 处理.docx文件
-            const result = await mammoth.extractRawText({ buffer });
-            content = result.value || '';
-            
-            if (result.messages && result.messages.length > 0) {
-              console.warn(`Word文档解析警告: ${originalname}`, result.messages);
-            }
-            
-            console.log(`成功解析.docx文件: ${originalname}, 提取了 ${content.length} 个字符`);
-          } else {
-            // 处理.doc文件（旧格式）
-            console.warn(`警告: ${originalname} 是旧版Word格式(.doc)，建议转换为.docx格式以获得更好的解析效果`);
-            content = `Word文档: ${originalname}\n\n注意：系统目前不支持旧版Word格式(.doc)的内容提取，建议将文档转换为.docx格式、PDF或纯文本后上传，或使用文本输入方式。`;
-          }
-          
-          // 检查内容是否为空或过短
-          if (content.length < 10) {
-            console.warn(`警告: Word文档 ${originalname} 提取的内容过短，可能解析失败`);
-            content = `Word文档: ${originalname}\n\n提取的内容为空或过短，请检查文档是否包含有效文本内容，或尝试使用文本输入方式。`;
-          }
-          
-          console.log(`Word文档处理完成: ${originalname}，提取了 ${content.length} 个字符`);
-        } catch (wordError) {
-          console.error(`Word文档处理错误: ${originalname}`, wordError);
-          const errorMessage = wordError instanceof Error ? wordError.message : '未知错误';
-          content = `Word文档: ${originalname}\n\n解析失败: ${errorMessage}\n\n建议将文档转换为PDF或纯文本后上传，或使用文本输入方式。`;
+        // 使用 Vercel 兼容的 DOCX 解析
+        if (fileExtension === '.docx' || mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+          content = await parseDocumentVercelCompatible(buffer, 'docx');
+          console.log(`[UPLOAD-${uploadId}] 成功解析DOCX文件: ${originalname}, 提取了 ${content.length} 个字符`);
+        } else {
+          // 处理.doc文件（旧格式）
+          console.warn(`[UPLOAD-${uploadId}] 警告: ${originalname} 是旧版Word格式(.doc)，建议转换为.docx格式`);
+          content = `Word文档: ${originalname}\n\n注意：系统目前不支持旧版Word格式(.doc)的内容提取，建议将文档转换为.docx格式、PDF或纯文本后上传，或使用文本输入方式。`;
         }
       } else {
         // 对于其他不支持的格式，使用更友好的提示
         content = `文件: ${originalname}\n\n注意：系统目前不支持此文件格式的内容提取，建议将文档转换为PDF或纯文本后上传，或使用文本输入方式。`;
-        console.log(`不支持的文件类型: ${mimetype}, 文件名: ${originalname}`);
+        console.log(`[UPLOAD-${uploadId}] 不支持的文件类型: ${mimetype}, 文件名: ${originalname}`);
       }
 
       // 确保内容不为空
       if (!content.trim()) {
         content = `无法提取 ${originalname} 的有效内容，请尝试使用文本方式输入`;
       }
+      
+      monitor.checkpoint('文本提取完成');
+      
+      // 内存优化
+      optimizeMemoryUsage();
     } catch (extractError) {
-      console.error('文件内容提取失败:', extractError);
-      // 记录更详细的错误信息
-      const errorMessage = extractError instanceof Error ? extractError.message : '未知错误';
-      const errorStack = extractError instanceof Error ? extractError.stack : '';
-      console.error(`文件内容提取详细错误: ${errorMessage}`);
-      if (errorStack) {
-        console.error(`错误堆栈: ${errorStack}`);
-      }
+      console.error(`[UPLOAD-${uploadId}] 文件内容提取失败:`, extractError);
+      enhancedErrorHandler(extractError, `文件提取-${uploadId}`);
       
       // 设置错误内容
+      const errorMessage = extractError instanceof Error ? extractError.message : '未知错误';
       content = `提取 ${originalname} 内容时出错，请尝试使用文本方式输入。错误信息: ${errorMessage}`;
     }
 

@@ -1,10 +1,6 @@
 # TODO:
 
-- [x] todo_201: 检查Supabase项目连接状态和配置信息 (priority: High)
-- [x] todo_202: 验证环境变量SUPABASE_URL和SUPABASE_ANON_KEY是否正确设置 (priority: High)
-- [x] todo_203: 检查数据库连接代码和Supabase客户端初始化 (priority: High)
-- [x] todo_204: 添加数据库连接测试和详细错误日志 (priority: High)
-- [ ] todo_205: 修复数据库连接问题并重新部署到Vercel (**IN PROGRESS**) (priority: High)
-- [ ] todo_206: 确保环境变量在生产环境正确加载 (priority: High)
-- [ ] todo_208: 提交代码并部署到Vercel (priority: High)
-- [ ] todo_207: 运行npm run check检查代码质量 (priority: Medium)
+- [x] todo_227: 创建专门的环境变量检查接口 /api/env-check，显示所有环境变量状态 (priority: High)
+- [ ] todo_228: 优化vercel.json配置确保环境变量正确传递 (**IN PROGRESS**) (priority: High)
+- [ ] todo_229: 重新部署到Vercel触发环境变量更新 (priority: High)
+- [ ] todo_230: 使用调试接口验证环境变量是否正确传递到生产环境 (priority: High)

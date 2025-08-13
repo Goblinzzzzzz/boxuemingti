@@ -1,18 +1,32 @@
 import express, { type Request, type Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabaseClient.js';
 import aiService from '../services/aiService.ts';
+import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization.js';
+import { optimizeMemoryUsage } from '../vercel-compatibility.js';
 
 const router = express.Router();
 
-// 初始化Supabase客户端
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://pnjibotdkfdvtfgqqakg.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuamlib3Rka2ZkdnRmZ3FxYWtnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDM2MzgyNiwiZXhwIjoyMDY5OTM5ODI2fQ.5WHYnrvY278MYatfm5hq1G7mspdp8ADNgDH1B-klzsM'
-);
+// Vercel 环境检测和优化
+if (process.env.VERCEL) {
+  console.log('🔍 生成路由 - Vercel 环境检测');
+  logMemoryUsage('生成路由初始化');
+}
 
 // 创建生成任务
 router.post('/tasks', async (req: Request, res: Response) => {
+  const taskId = Date.now().toString(36);
+  const monitor = new PerformanceMonitor(`生成任务创建-${taskId}`);
+  
   try {
+    console.log(`[TASK-${taskId}] 开始创建生成任务...`);
+    monitor.checkpoint('请求开始');
+    
+    // Vercel 环境内存优化
+    if (process.env.VERCEL) {
+      optimizeMemoryUsage();
+      logMemoryUsage(`任务创建-${taskId}`);
+    }
+    
     const {
       materialId,
       questionCount,
@@ -20,16 +34,23 @@ router.post('/tasks', async (req: Request, res: Response) => {
       difficulty,
       knowledgePoints
     } = req.body;
+    
+    console.log(`[TASK-${taskId}] 任务参数:`, { materialId, questionCount, questionTypes, difficulty });
 
     // 验证必需参数
     if (!materialId || !questionCount || !questionTypes || !difficulty) {
+      console.log(`[TASK-${taskId}] 参数验证失败: 缺少必需参数`);
       return res.status(400).json({
         success: false,
-        error: '缺少必需参数'
+        error: '缺少必需参数',
+        taskId
       });
     }
+    
+    monitor.checkpoint('参数验证完成');
 
     // 获取教材信息
+    console.log(`[TASK-${taskId}] 查询教材信息: ${materialId}`);
     const { data: material, error: materialError } = await supabase
       .from('materials')
       .select('*')
@@ -37,11 +58,16 @@ router.post('/tasks', async (req: Request, res: Response) => {
       .single();
 
     if (materialError || !material) {
+      console.error(`[TASK-${taskId}] 教材查询失败:`, materialError);
       return res.status(404).json({
         success: false,
-        error: '教材不存在'
+        error: '教材不存在',
+        taskId
       });
     }
+    
+    console.log(`[TASK-${taskId}] 教材信息获取成功: ${material.title}`);
+    monitor.checkpoint('教材信息获取');
 
     // 创建生成任务
     const { data: task, error: taskError } = await supabase
@@ -67,8 +93,13 @@ router.post('/tasks', async (req: Request, res: Response) => {
       .single();
 
     if (taskError) {
+      console.error(`[TASK-${taskId}] 任务创建失败:`, taskError);
+      enhancedErrorHandler(taskError, `任务创建-${taskId}`);
       throw taskError;
     }
+    
+    console.log(`[TASK-${taskId}] 任务创建成功: ${task.id}`);
+    monitor.checkpoint('任务创建完成');
 
     // 异步开始生成过程，但使用await确保任务开始执行
     console.log(`开始异步生成试题，任务ID: ${task.id}`);
@@ -96,11 +127,22 @@ router.post('/tasks', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('创建生成任务失败:', error);
-    res.status(500).json({
-      success: false,
-      error: '创建生成任务失败'
-    });
+    console.error(`[TASK-${taskId}] 创建生成任务失败:`, error);
+    enhancedErrorHandler(error, `任务创建-${taskId}`);
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: '创建生成任务失败',
+        taskId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } finally {
+    // 内存清理
+    if (process.env.VERCEL) {
+      optimizeMemoryUsage();
+    }
   }
 });
 
