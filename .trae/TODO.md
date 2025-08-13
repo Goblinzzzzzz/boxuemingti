@@ -1,9 +1,10 @@
 # TODO:
 
-- [x] todo_194: 检查并修复package.json中的Node.js版本和engines配置 (priority: High)
-- [x] todo_195: 分析并修复ES模块在Vercel环境中的兼容性问题 (priority: High)
-- [x] todo_196: 检查API路由文件的import/export语句兼容性 (priority: High)
-- [x] todo_197: 优化API函数以符合Vercel serverless函数限制 (priority: High)
-- [x] todo_198: 添加Vercel特定的错误处理和调试日志 (priority: Medium)
-- [x] todo_199: 检查并解决可能的依赖包版本冲突 (priority: Medium)
-- [ ] todo_200: 测试修复后的代码并自动部署到Vercel (**IN PROGRESS**) (priority: High)
+- [x] todo_201: 检查Supabase项目连接状态和配置信息 (priority: High)
+- [x] todo_202: 验证环境变量SUPABASE_URL和SUPABASE_ANON_KEY是否正确设置 (priority: High)
+- [x] todo_203: 检查数据库连接代码和Supabase客户端初始化 (priority: High)
+- [x] todo_204: 添加数据库连接测试和详细错误日志 (priority: High)
+- [ ] todo_205: 修复数据库连接问题并重新部署到Vercel (**IN PROGRESS**) (priority: High)
+- [ ] todo_206: 确保环境变量在生产环境正确加载 (priority: High)
+- [ ] todo_208: 提交代码并部署到Vercel (priority: High)
+- [ ] todo_207: 运行npm run check检查代码质量 (priority: Medium)

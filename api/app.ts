@@ -112,6 +112,7 @@ import questionsRoutes from './routes/questions.js';
 import reviewRoutes from './routes/review.js';
 import usersRoutes from './routes/users.js';
 import systemRoutes from './routes/system.js';
+import healthRoutes from './routes/health.js';
 
 
 const app: express.Application = express();
@@ -150,58 +151,9 @@ app.use('/api/questions', questionsRoutes);
 app.use('/api/review', reviewRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/health', healthRoutes);
 
-/**
- * health check with detailed system status
- */
-app.use('/api/health', (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const healthStatus = {
-      success: true,
-      message: 'API服务正常运行',
-      timestamp: new Date().toISOString(),
-      environment: {
-        nodeEnv: process.env.NODE_ENV || 'unknown',
-        port: process.env.PORT || 'unknown',
-        aiProvider: process.env.AI_PROVIDER || 'unknown'
-      },
-      services: {
-        supabase: {
-          configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
-          url: process.env.SUPABASE_URL ? '已配置' : '未配置'
-        },
-        jwt: {
-          configured: !!process.env.JWT_SECRET,
-          status: process.env.JWT_SECRET ? '已配置' : '未配置'
-        }
-      },
-      validation: {
-        environmentCheck: envValidationResult || false,
-        criticalServices: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.JWT_SECRET)
-      }
-    };
-    
-    // 如果关键服务未配置，返回警告状态
-    if (!healthStatus.validation.criticalServices) {
-      healthStatus.success = false;
-      healthStatus.message = '部分关键服务未正确配置';
-      console.warn('⚠️ 健康检查发现配置问题:', healthStatus);
-      res.status(503).json(healthStatus);
-       return;
-    }
-    
-    console.log('✅ 健康检查通过:', healthStatus.message);
-    res.status(200).json(healthStatus);
-  } catch (error) {
-    console.error('❌ 健康检查失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '健康检查失败',
-      error: error instanceof Error ? error.message : '未知错误',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
+// 健康检查路由已移动到 /api/health 路由文件中
 
 /**
  * error handler middleware with Vercel-specific logging

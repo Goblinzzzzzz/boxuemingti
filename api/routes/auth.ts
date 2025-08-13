@@ -112,64 +112,190 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const startTime = Date.now();
+  const loginId = Date.now().toString(36);
+  
   try {
-    console.log(`[${new Date().toISOString()}] 登录请求开始`);
+    console.log(`[LOGIN-${loginId}] 登录请求开始 - ${new Date().toISOString()}`);
+    console.log(`[LOGIN-${loginId}] 环境检查:`, {
+      nodeEnv: process.env.NODE_ENV,
+      jwtSecret: process.env.JWT_SECRET ? '已设置' : '未设置',
+      supabaseUrl: process.env.SUPABASE_URL ? '已设置' : '未设置',
+      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? '已设置' : '未设置',
+      vercelRegion: process.env.VERCEL_REGION || 'local'
+    });
+    
     const { email, password, remember_me = false } = req.body;
 
     // 验证必填字段
     if (!email || !password) {
-      console.log('登录失败: 缺少必填字段');
+      console.log(`[LOGIN-${loginId}] 登录失败: 缺少必填字段`);
       res.status(400).json({
         success: false,
-        message: '邮箱和密码为必填字段'
+        message: '邮箱和密码为必填字段',
+        loginId
       });
       return;
     }
 
-    console.log(`尝试登录用户: ${email}`);
+    console.log(`[LOGIN-${loginId}] 尝试登录用户: ${email}`);
+
+    // 数据库连接测试
+    console.log(`[LOGIN-${loginId}] 测试数据库连接...`);
+    const dbTestStart = Date.now();
+    
+    try {
+      // 先进行简单的连接测试
+      const { data: testData, error: testError } = await supabase
+        .from('users')
+        .select('count')
+        .limit(1);
+      
+      const dbTestTime = Date.now() - dbTestStart;
+      
+      if (testError) {
+        console.error(`[LOGIN-${loginId}] 数据库连接测试失败 (${dbTestTime}ms):`, {
+          error: testError.message,
+          code: testError.code,
+          details: testError.details,
+          hint: testError.hint
+        });
+        
+        res.status(503).json({
+          success: false,
+          message: '数据库连接失败，请稍后重试',
+          error: {
+            type: 'DATABASE_CONNECTION_ERROR',
+            message: testError.message,
+            code: testError.code
+          },
+          loginId,
+          timing: {
+            dbTestTime: `${dbTestTime}ms`
+          }
+        });
+        return;
+      }
+      
+      console.log(`[LOGIN-${loginId}] 数据库连接测试成功 (${dbTestTime}ms)`);
+    } catch (dbError) {
+      const dbTestTime = Date.now() - dbTestStart;
+      console.error(`[LOGIN-${loginId}] 数据库连接异常 (${dbTestTime}ms):`, dbError);
+      
+      res.status(503).json({
+        success: false,
+        message: '数据库服务不可用',
+        error: {
+          type: 'DATABASE_SERVICE_ERROR',
+          message: dbError instanceof Error ? dbError.message : '未知数据库错误'
+        },
+        loginId,
+        timing: {
+          dbTestTime: `${dbTestTime}ms`
+        }
+      });
+      return;
+    }
 
     // 查找用户
+    console.log(`[LOGIN-${loginId}] 查询用户信息...`);
+    const userQueryStart = Date.now();
+    
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, email, password_hash, name, organization, status')
       .eq('email', email)
       .single();
 
+    const userQueryTime = Date.now() - userQueryStart;
+
     if (userError) {
-      console.error('数据库查询用户失败:', userError);
-      res.status(500).json({
-        success: false,
-        message: '数据库查询失败',
-        error: userError.message
+      console.error(`[LOGIN-${loginId}] 数据库查询用户失败 (${userQueryTime}ms):`, {
+        error: userError.message,
+        code: userError.code,
+        details: userError.details,
+        hint: userError.hint
       });
+      
+      // 根据错误类型返回不同的响应
+      if (userError.code === 'PGRST116') {
+        // 用户不存在
+        console.log(`[LOGIN-${loginId}] 用户不存在: ${email}`);
+        res.status(401).json({
+          success: false,
+          message: '邮箱或密码错误',
+          loginId
+        });
+      } else {
+        // 其他数据库错误
+        res.status(500).json({
+          success: false,
+          message: '数据库查询失败',
+          error: {
+            type: 'DATABASE_QUERY_ERROR',
+            message: userError.message,
+            code: userError.code
+          },
+          loginId,
+          timing: {
+            userQueryTime: `${userQueryTime}ms`
+          }
+        });
+      }
       return;
     }
+    
+    console.log(`[LOGIN-${loginId}] 用户查询成功 (${userQueryTime}ms)`);
 
     if (!user) {
-      console.log(`用户不存在: ${email}`);
+      console.log(`[LOGIN-${loginId}] 用户不存在: ${email}`);
       res.status(401).json({
         success: false,
-        message: '邮箱或密码错误'
+        message: '邮箱或密码错误',
+        loginId
       });
       return;
     }
 
     // 验证密码
-    console.log('验证用户密码...');
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-    if (!isPasswordValid) {
-      console.log(`密码验证失败: ${email}`);
-      res.status(401).json({
+    console.log(`[LOGIN-${loginId}] 验证用户密码...`);
+    const passwordStart = Date.now();
+    
+    try {
+      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+      const passwordTime = Date.now() - passwordStart;
+      
+      if (!isPasswordValid) {
+        console.log(`[LOGIN-${loginId}] 密码验证失败: ${email} (${passwordTime}ms)`);
+        res.status(401).json({
+          success: false,
+          message: '邮箱或密码错误',
+          loginId
+        });
+        return;
+      }
+      
+      console.log(`[LOGIN-${loginId}] 密码验证成功 (${passwordTime}ms)`);
+    } catch (passwordError) {
+      const passwordTime = Date.now() - passwordStart;
+      console.error(`[LOGIN-${loginId}] 密码验证异常 (${passwordTime}ms):`, passwordError);
+      
+      res.status(500).json({
         success: false,
-        message: '邮箱或密码错误'
+        message: '密码验证失败',
+        error: {
+          type: 'PASSWORD_VERIFICATION_ERROR',
+          message: passwordError instanceof Error ? passwordError.message : '密码验证异常'
+        },
+        loginId,
+        timing: {
+          passwordTime: `${passwordTime}ms`
+        }
       });
       return;
     }
-    
-    console.log('密码验证成功');
 
     // 检查用户状态
-    console.log(`检查用户状态: ${user.status}`);
+    console.log(`[LOGIN-${loginId}] 检查用户状态: ${user.status}`);
     if (user.status !== 'active') {
       let message = '账户状态异常，无法登录';
       
@@ -187,84 +313,146 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
           message = '账户状态异常，无法登录';
       }
       
-      console.log(`用户状态检查失败: ${user.status} - ${message}`);
+      console.log(`[LOGIN-${loginId}] 用户状态检查失败: ${user.status} - ${message}`);
       res.status(403).json({
         success: false,
         message,
-        status: user.status
+        status: user.status,
+        loginId
       });
       return;
     }
 
     // 获取用户角色
-    console.log('获取用户角色...');
-    const { data: userRoles, error: roleError } = await supabase
-      .from('user_roles')
-      .select(`
-        roles (
-          name,
-          description
-        )
-      `)
-      .eq('user_id', user.id);
+    console.log(`[LOGIN-${loginId}] 获取用户角色...`);
+    const roleStart = Date.now();
+    
+    let roles = ['user']; // 默认角色
+    
+    try {
+      const { data: userRoles, error: roleError } = await supabase
+        .from('user_roles')
+        .select(`
+          roles (
+            name,
+            description
+          )
+        `)
+        .eq('user_id', user.id);
 
-    if (roleError) {
-      console.error('获取用户角色失败:', roleError);
-      // 继续执行，使用默认角色
+      const roleTime = Date.now() - roleStart;
+
+      if (roleError) {
+        console.error(`[LOGIN-${loginId}] 获取用户角色失败 (${roleTime}ms):`, {
+          error: roleError.message,
+          code: roleError.code,
+          details: roleError.details
+        });
+        console.log(`[LOGIN-${loginId}] 使用默认角色: user`);
+      } else {
+        roles = userRoles?.map((ur: any) => ur.roles.name) || ['user'];
+        console.log(`[LOGIN-${loginId}] 用户角色获取成功 (${roleTime}ms): ${roles.join(', ')}`);
+      }
+    } catch (roleException) {
+      const roleTime = Date.now() - roleStart;
+      console.error(`[LOGIN-${loginId}] 获取用户角色异常 (${roleTime}ms):`, roleException);
+      console.log(`[LOGIN-${loginId}] 使用默认角色: user`);
     }
 
-    const roles = userRoles?.map((ur: any) => ur.roles.name) || ['user'];
-    console.log(`用户角色: ${roles.join(', ')}`);
-
     // 生成JWT token
-    console.log('生成JWT token...');
-    const tokenPayload = {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      roles
-    };
+    console.log(`[LOGIN-${loginId}] 生成JWT token...`);
+    const tokenStart = Date.now();
+    
+    try {
+      const tokenPayload = {
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        roles
+      };
 
-    if (!JWT_SECRET) {
-      console.error('JWT_SECRET 环境变量未设置');
+      if (!JWT_SECRET) {
+        console.error(`[LOGIN-${loginId}] JWT_SECRET 环境变量未设置`);
+        res.status(500).json({
+          success: false,
+          message: '服务器配置错误',
+          error: {
+            type: 'JWT_CONFIG_ERROR',
+            message: 'JWT_SECRET 环境变量未设置'
+          },
+          loginId
+        });
+        return;
+      }
+
+      const accessToken = jwt.sign(tokenPayload, JWT_SECRET, {
+        expiresIn: JWT_EXPIRES_IN
+      });
+
+      const refreshToken = jwt.sign(
+        { userId: user.id },
+        JWT_SECRET,
+        { expiresIn: remember_me ? REFRESH_TOKEN_EXPIRES_IN : '7d' }
+      );
+      
+      const tokenTime = Date.now() - tokenStart;
+      console.log(`[LOGIN-${loginId}] JWT token 生成成功 (${tokenTime}ms)`);
+      
+      // 存储生成的token以便后续使用
+      var generatedTokens = { accessToken, refreshToken };
+    } catch (tokenError) {
+      const tokenTime = Date.now() - tokenStart;
+      console.error(`[LOGIN-${loginId}] JWT token 生成失败 (${tokenTime}ms):`, tokenError);
+      
       res.status(500).json({
         success: false,
-        message: '服务器配置错误'
+        message: 'Token生成失败',
+        error: {
+          type: 'JWT_GENERATION_ERROR',
+          message: tokenError instanceof Error ? tokenError.message : 'Token生成异常'
+        },
+        loginId,
+        timing: {
+          tokenTime: `${tokenTime}ms`
+        }
       });
       return;
     }
 
-    const accessToken = jwt.sign(tokenPayload, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN
-    });
-
-    const refreshToken = jwt.sign(
-      { userId: user.id },
-      JWT_SECRET,
-      { expiresIn: remember_me ? REFRESH_TOKEN_EXPIRES_IN : '7d' }
-    );
-    
-    console.log('JWT token 生成成功');
-
     // 更新最后登录时间
-    console.log('更新最后登录时间...');
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ last_login_at: new Date().toISOString() })
-      .eq('id', user.id);
+    console.log(`[LOGIN-${loginId}] 更新最后登录时间...`);
+    const updateStart = Date.now();
+    
+    try {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ last_login_at: new Date().toISOString() })
+        .eq('id', user.id);
 
-    if (updateError) {
-      console.error('更新最后登录时间失败:', updateError);
+      const updateTime = Date.now() - updateStart;
+
+      if (updateError) {
+        console.error(`[LOGIN-${loginId}] 更新最后登录时间失败 (${updateTime}ms):`, {
+          error: updateError.message,
+          code: updateError.code
+        });
+        // 继续执行，不影响登录流程
+      } else {
+        console.log(`[LOGIN-${loginId}] 最后登录时间更新成功 (${updateTime}ms)`);
+      }
+    } catch (updateException) {
+      const updateTime = Date.now() - updateStart;
+      console.error(`[LOGIN-${loginId}] 更新最后登录时间异常 (${updateTime}ms):`, updateException);
       // 继续执行，不影响登录流程
     }
 
     const duration = Date.now() - startTime;
-    console.log(`登录成功，用时: ${duration}ms`);
+    console.log(`[LOGIN-${loginId}] 登录成功，总用时: ${duration}ms`);
 
     res.json({
       success: true,
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      access_token: generatedTokens.accessToken,
+      refresh_token: generatedTokens.refreshToken,
       expires_in: 24 * 60 * 60, // 24小时（秒）
       user: {
         id: user.id,
@@ -272,18 +460,64 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         organization: user.organization,
         roles
+      },
+      loginId,
+      timing: {
+        totalTime: `${duration}ms`,
+        timestamp: new Date().toISOString()
       }
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`登录过程中发生错误 (用时: ${duration}ms):`, error);
-    console.error('错误堆栈:', error instanceof Error ? error.stack : 'No stack trace');
-    
-    res.status(500).json({
-      success: false,
-      message: '服务器内部错误',
-      error: error instanceof Error ? error.message : 'Unknown error',
+    console.error(`[LOGIN-${loginId}] 登录过程中发生未捕获错误 (用时: ${duration}ms):`, {
+      error: error instanceof Error ? error.message : '未知错误',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      nodeEnv: process.env.NODE_ENV,
+      vercelRegion: process.env.VERCEL_REGION || 'local',
       timestamp: new Date().toISOString()
+    });
+    
+    // 根据错误类型返回不同的状态码
+    let statusCode = 500;
+    let errorType = 'INTERNAL_ERROR';
+    let errorMessage = '服务器内部错误';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('JWT')) {
+        statusCode = 500;
+        errorType = 'JWT_ERROR';
+        errorMessage = 'Token处理错误';
+      } else if (error.message.includes('database') || error.message.includes('Supabase')) {
+        statusCode = 503;
+        errorType = 'DATABASE_ERROR';
+        errorMessage = '数据库服务不可用';
+      } else if (error.message.includes('timeout')) {
+        statusCode = 408;
+        errorType = 'TIMEOUT_ERROR';
+        errorMessage = '请求超时';
+      } else if (error.message.includes('network')) {
+        statusCode = 503;
+        errorType = 'NETWORK_ERROR';
+        errorMessage = '网络连接错误';
+      }
+    }
+    
+    res.status(statusCode).json({
+      success: false,
+      message: errorMessage,
+      error: {
+        type: errorType,
+        message: process.env.NODE_ENV === 'production' ? errorMessage : (error instanceof Error ? error.message : '未知错误')
+      },
+      loginId,
+      timing: {
+        totalTime: `${duration}ms`,
+        timestamp: new Date().toISOString()
+      },
+      environment: {
+        nodeEnv: process.env.NODE_ENV,
+        vercelRegion: process.env.VERCEL_REGION || 'local'
+      }
     });
   }
 });
