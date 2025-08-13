@@ -1,8 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import multer from 'multer';
-// 直接从lib导入以避免测试文件问题
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import pdfParse from 'pdf-parse';
 import * as mammoth from 'mammoth';
 
 const router = express.Router();

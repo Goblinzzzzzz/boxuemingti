@@ -1,6 +1,6 @@
 import express from 'express';
-import { authenticateToken, requireRole } from '../middleware/auth.js';
-import { supabase } from '../services/supabaseClient.js';
+import { authenticateToken, requireRole } from '../middleware/auth';
+import { supabase } from '../services/supabaseClient';
 
 const router = express.Router();
 

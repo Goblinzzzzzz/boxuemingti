@@ -105,13 +105,13 @@ const envValidationResult = validateEnvironment();
 
 import express, { type Request, type Response, type NextFunction }  from 'express';
 import cors from 'cors';
-import authRoutes from './routes/auth.ts';
-import materialsRoutes from './routes/materials.ts';
-import generationRoutes from './routes/generation.ts';
-import questionsRoutes from './routes/questions.ts';
-import reviewRoutes from './routes/review.ts';
-import usersRoutes from './routes/users.ts';
-import systemRoutes from './routes/system.ts';
+import authRoutes from './routes/auth.js';
+import materialsRoutes from './routes/materials.js';
+import generationRoutes from './routes/generation.js';
+import questionsRoutes from './routes/questions.js';
+import reviewRoutes from './routes/review.js';
+import usersRoutes from './routes/users.js';
+import systemRoutes from './routes/system.js';
 
 
 const app: express.Application = express();
@@ -204,21 +204,48 @@ app.use('/api/health', (req: Request, res: Response, next: NextFunction) => {
 });
 
 /**
- * error handler middleware
+ * error handler middleware with Vercel-specific logging
  */
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('全局错误处理器捕获到错误:', error);
-  console.error('错误详情:', error.message);
-  console.error('错误堆栈:', error.stack);
-  console.error('请求路径:', req.path);
-  console.error('请求方法:', req.method);
+  const errorId = Date.now().toString(36);
   
-  res.status(500).json({
-    success: false,
-    error: 'Server internal error',
-    message: error.message,
-    details: error.toString()
+  console.error(`[ERROR-${errorId}] 全局错误处理器捕获到错误:`, {
+    error: error.message,
+    stack: error.stack,
+    path: req.path,
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    query: req.query,
+    timestamp: new Date().toISOString(),
+    vercelRegion: process.env.VERCEL_REGION || 'unknown',
+    nodeEnv: process.env.NODE_ENV || 'unknown'
   });
+  
+  // 检查是否是特定类型的错误
+  let statusCode = 500;
+  let errorType = 'INTERNAL_ERROR';
+  
+  if (error.message.includes('JWT')) {
+    statusCode = 401;
+    errorType = 'AUTH_ERROR';
+  } else if (error.message.includes('Supabase') || error.message.includes('database')) {
+    statusCode = 503;
+    errorType = 'DATABASE_ERROR';
+  } else if (error.message.includes('timeout')) {
+    statusCode = 408;
+    errorType = 'TIMEOUT_ERROR';
+  }
+  
+  if (!res.headersSent) {
+    res.status(statusCode).json({
+      success: false,
+      error: errorType,
+      message: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message,
+      errorId: errorId,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 /**

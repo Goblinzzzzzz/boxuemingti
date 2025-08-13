@@ -4,7 +4,7 @@
  */
 import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcrypt';
-import { supabase } from '../services/supabaseClient.js';
+import { supabase } from '../services/supabaseClient';
 import { 
   authenticateToken, 
   requireAdmin, 
