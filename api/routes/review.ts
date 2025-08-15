@@ -2,7 +2,6 @@ import { Router, type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { questionReviewService } from '../services/questionReviewService';
 import { authenticateUser, type AuthenticatedRequest } from '../middleware/auth';
-import { supabase } from '../services/supabaseClient';
 import { aiService } from '../services/aiService';
 import { vercelLogger } from '../vercel-logger';
 import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
@@ -10,8 +9,8 @@ import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 // 创建 Supabase 客户端
 const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://your-project.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'your-service-role-key'
+  process.env.SUPABASE_URL || 'https://pnjibotdkfdvtfgqqakg.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuamlib3Rka2ZkdnRmZ3FxYWtnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDM2MzgyNiwiZXhwIjoyMDY5OTM5ODI2fQ.5WHYnrvY278MYatfm5hq1G7mspdp8ADNgDH1B-klzsM'
 );
 
 const router = Router();

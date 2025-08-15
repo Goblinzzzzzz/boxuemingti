@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { supabase } from '../services/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 import { authenticateUser, AuthenticatedRequest } from '../middleware/auth';
 import { vercelLogger } from '../vercel-logger';
 import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
