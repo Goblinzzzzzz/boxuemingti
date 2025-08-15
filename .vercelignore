@@ -10,7 +10,7 @@ node_modules
 .env.development
 
 # TypeScript source files (保留编译后的文件)
-src/
+# src/ - 注释掉，前端需要src目录进行构建
 
 # API TypeScript config (避免冲突)
 api/tsconfig.json
