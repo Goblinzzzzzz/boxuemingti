@@ -16,9 +16,9 @@ dist
 !postcss.config.js
 !eslint.config.js
 
-# 只允许 api 目录下的文件作为 Serverless Functions
-!api/index.js
-!api/index.ts
+# 允许 api 目录下的所有文件作为 Serverless Functions
+!api/**/*.js
+!api/**/*.ts
 
 # 明确排除所有测试和工具脚本
 add-*.js
