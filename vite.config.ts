@@ -15,6 +15,13 @@ export default defineConfig({
     }),
     tsconfigPaths(),
   ],
+  build: {
+    rollupOptions: {
+      input: {
+        main: '/index.html'
+      }
+    }
+  },
   server: {
     port: 5173,
     // 只在开发环境使用代理，避免与Vercel serverless函数冲突
