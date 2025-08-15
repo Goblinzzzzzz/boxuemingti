@@ -4,7 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcrypt';
-import { supabase } from '../services/supabaseClient.js';
+import { supabase } from '../services/supabaseClient';
 
 // 密码加密轮数
 const SALT_ROUNDS = 12;

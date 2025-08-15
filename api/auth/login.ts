@@ -5,8 +5,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { supabase } from '../services/supabaseClient.js';
-import { vercelLogger } from '../vercel-logger.js';
+import { supabase } from '../services/supabaseClient';
+import { vercelLogger } from '../vercel-logger';
 
 // JWT配置
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
