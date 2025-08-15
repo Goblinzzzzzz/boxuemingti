@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { createClient } from '@supabase/supabase-js';
 import { questionReviewService } from '../services/questionReviewService';
 import { authenticateUser, type AuthenticatedRequest } from '../middleware/auth';
 import { supabase } from '../services/supabaseClient';
@@ -6,6 +7,12 @@ import { aiService } from '../services/aiService';
 import { vercelLogger } from '../vercel-logger';
 import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
 import { optimizeMemoryUsage } from '../vercel-compatibility';
+
+// 创建 Supabase 客户端
+const supabase = createClient(
+  process.env.SUPABASE_URL || 'https://your-project.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'your-service-role-key'
+);
 
 const router = Router();
 

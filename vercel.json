@@ -7,7 +7,8 @@
   "functions": {
     "api/**/*.{js,ts}": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
@@ -46,5 +47,6 @@
     "env": {
       "NODE_ENV": "production"
     }
-  }
+  },
+  "supportsWrapper": false
 }
