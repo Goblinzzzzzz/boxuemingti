@@ -5,9 +5,10 @@
   "devCommand": "npm run dev",
   "framework": "vite",
   "functions": {
-    "api/**/*.ts": {
+    "api/**/*.{js,ts}": {
+      "memory": 3008,
       "maxDuration": 60,
-      "memory": 3008
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
