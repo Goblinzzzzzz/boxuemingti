@@ -6,12 +6,6 @@ import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../ver
 import { optimizeMemoryUsage } from '../vercel-compatibility';
 import { questionReviewService } from '../services/questionReviewService';
 
-// 创建 Supabase 客户端
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://pnjibotdkfdvtfgqqakg.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuamlib3Rka2ZkdnRmZ3FxYWtnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDM2MzgyNiwiZXhwIjoyMDY5OTM5ODI2fQ.5WHYnrvY278MYatfm5hq1G7mspdp8ADNgDH1B-klzsM'
-);
-
 const router = Router();
 
 /**
