@@ -1,17 +1,45 @@
--- 创建测试用户
-INSERT INTO users (email, password_hash, name, organization, email_verified, status)
-VALUES (
-  'zhaodan@ke.com',
-  '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- 密码: password
-  '赵丹',
-  '科技公司',
-  true,
-  'active'
-)
-ON CONFLICT (email) DO UPDATE SET
-  password_hash = EXCLUDED.password_hash,
-  name = EXCLUDED.name,
-  organization = EXCLUDED.organization,
-  email_verified = EXCLUDED.email_verified,
-  status = EXCLUDED.status,
-  updated_at = now();
+-- 检查并创建测试用户 zhaodan@ke.com
+-- 如果用户不存在，则创建该用户
+
+-- 首先检查用户是否已存在
+DO $$
+BEGIN
+    -- 如果用户不存在，则插入新用户
+    IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'zhaodan@ke.com') THEN
+        INSERT INTO users (
+            email,
+            password_hash,
+            name,
+            organization,
+            email_verified,
+            status,
+            created_at,
+            updated_at
+        ) VALUES (
+            'zhaodan@ke.com',
+            '$2b$10$8K1p/a0dhtAXjD/X/YGVSO3RXSWHxkqX3gvfq1CoFnLegpLwZBvTW', -- bcrypt hash for '123456'
+            '赵丹',
+            'KE测试组织',
+            true,
+            'active',
+            NOW(),
+            NOW()
+        );
+        
+        RAISE NOTICE '测试用户 zhaodan@ke.com 已创建';
+    ELSE
+        RAISE NOTICE '测试用户 zhaodan@ke.com 已存在';
+    END IF;
+END $$;
+
+-- 验证用户是否存在
+SELECT 
+    id,
+    email,
+    name,
+    organization,
+    email_verified,
+    status,
+    created_at
+FROM users 
+WHERE email = 'zhaodan@ke.com';

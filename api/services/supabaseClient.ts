@@ -5,7 +5,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { getCachedSupabase, logMemoryUsage, enhancedErrorHandler } from '../vercel-optimization';
+// 移除有问题的vercel-optimization依赖
 
 // 加载环境变量
 dotenv.config();
@@ -17,12 +17,11 @@ function createSupabaseClient() {
 
   if (!supabaseUrl || !supabaseServiceKey) {
     const error = new Error('缺少Supabase配置：SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量是必需的');
-    enhancedErrorHandler(error, 'Supabase客户端初始化');
+    console.error('Supabase客户端初始化失败:', error);
     throw error;
   }
 
   console.log('🔗 创建 Supabase 客户端...');
-  logMemoryUsage('Supabase客户端创建前');
 
   try {
     const client = createClient(supabaseUrl, supabaseServiceKey, {
@@ -42,20 +41,16 @@ function createSupabaseClient() {
       }
     });
 
-    logMemoryUsage('Supabase客户端创建后');
     console.log('✅ Supabase 客户端创建成功');
     return client;
   } catch (error) {
-    enhancedErrorHandler(error, 'Supabase客户端创建');
+    console.error('Supabase客户端创建失败:', error);
     throw error;
   }
 }
 
 // 导出 Supabase 客户端
-// 在 Vercel 环境中使用缓存，本地环境直接创建
-export const supabase = process.env.VERCEL 
-  ? getCachedSupabase() || createSupabaseClient()
-  : createSupabaseClient();
+export const supabase = createSupabaseClient();
 
 // 导出类型定义
 // Database type will be defined based on actual schema
@@ -88,7 +83,7 @@ export async function testSupabaseConnection() {
     console.log(`[SUPABASE-TEST-${testId}] 连接测试成功 (${duration}ms)`);
     return { success: true, data, duration };
   } catch (error) {
-    enhancedErrorHandler(error, `SUPABASE-TEST-${testId}`);
+    console.error(`[SUPABASE-TEST-${testId}] 连接测试异常:`, error);
     return { success: false, error, duration: 0 };
   }
 }

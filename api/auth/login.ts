@@ -6,7 +6,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../services/supabaseClient';
-import { vercelLogger } from '../vercel-logger';
+// 移除有问题的vercel-logger依赖
 
 // JWT配置
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -24,14 +24,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const startTime = Date.now();
-  const requestLogger = vercelLogger.createRequestLogger(req);
-  const loginId = requestLogger.getRequestId();
+  const loginId = `login_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   try {
-    requestLogger.info('登录请求开始');
-    vercelLogger.auth('login_attempt', undefined, false, { email: req.body.email });
+    console.log('登录请求开始', { loginId, email: req.body.email });
     
-    requestLogger.info('环境检查', {
+    console.log('环境检查', {
+      loginId,
       nodeEnv: process.env.NODE_ENV,
       jwtSecret: process.env.JWT_SECRET ? '已设置' : '未设置',
       supabaseUrl: process.env.SUPABASE_URL ? '已设置' : '未设置',
@@ -43,8 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 验证必填字段
     if (!email || !password) {
-      requestLogger.warn('登录失败: 缺少必填字段');
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'missing_credentials' });
+      console.log('登录失败: 缺少必填字段', { loginId });
       return res.status(400).json({
         success: false,
         message: '邮箱和密码为必填字段',
@@ -52,10 +50,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    requestLogger.info(`尝试登录用户: ${email}`);
+    console.log(`尝试登录用户: ${email}`, { loginId });
 
     // 数据库连接测试
-    requestLogger.info('测试数据库连接');
+    console.log('测试数据库连接', { loginId });
     let dbTestTime = 0;
     
     try {
@@ -69,7 +67,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dbTestTime = Date.now() - dbTestStart;
       
       if (testError) {
-        requestLogger.error(`数据库连接测试失败 (${dbTestTime}ms)`, {
+        console.error(`数据库连接测试失败 (${dbTestTime}ms)`, {
+          loginId,
           error: testError.message,
           code: testError.code,
           details: testError.details,
@@ -91,11 +90,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
-      requestLogger.performance('db_connection_test', dbTestTime);
-      requestLogger.database('connection_test', 'users', dbTestTime);
+      console.log(`数据库连接测试成功 (${dbTestTime}ms)`, { loginId });
     } catch (dbError) {
-      requestLogger.error(`数据库连接异常 (${dbTestTime}ms)`, dbError);
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'db_connection_failed', error: dbError });
+      console.error(`数据库连接异常 (${dbTestTime}ms)`, { loginId, error: dbError });
       
       return res.status(503).json({
         success: false,
@@ -112,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 查询用户
-    requestLogger.info('查询用户信息');
+    console.log('查询用户信息', { loginId });
     const userQueryStart = Date.now();
     
     const { data: user, error: userError } = await supabase
@@ -122,13 +119,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     const userQueryTime = Date.now() - userQueryStart;
-    requestLogger.performance('user_query', userQueryTime);
-    requestLogger.database('user_query', 'users', userQueryTime);
+    console.log(`用户查询完成 (${userQueryTime}ms)`, { loginId });
 
     if (userError) {
       if (userError.code === 'PGRST116') {
-        requestLogger.warn(`用户不存在: ${email}`);
-        vercelLogger.auth('login_failed', undefined, false, { reason: 'user_not_found', email });
+        console.log(`用户不存在: ${email}`, { loginId });
         return res.status(401).json({
           success: false,
           message: '邮箱或密码错误',
@@ -136,12 +131,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
-      requestLogger.error('用户查询失败', {
+      console.error('用户查询失败', {
+        loginId,
         error: userError.message,
         code: userError.code,
         email
       });
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'user_query_failed', error: userError });
       
       return res.status(500).json({
         success: false,
@@ -156,8 +151,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!user) {
-      requestLogger.warn(`用户不存在: ${email}`);
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'user_not_found', email });
+      console.log(`用户不存在: ${email}`, { loginId });
       return res.status(401).json({
         success: false,
         message: '邮箱或密码错误',
@@ -165,20 +159,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    requestLogger.info(`找到用户: ${user.email} (ID: ${user.id})`);
+    console.log(`找到用户: ${user.email} (ID: ${user.id})`, { loginId });
 
     // 验证密码
-    requestLogger.info('验证密码');
+    console.log('验证密码', { loginId });
     const passwordVerifyStart = Date.now();
     
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     
     const passwordVerifyTime = Date.now() - passwordVerifyStart;
-    requestLogger.performance('password_verify', passwordVerifyTime);
+    console.log(`密码验证完成 (${passwordVerifyTime}ms)`, { loginId });
 
     if (!isPasswordValid) {
-      requestLogger.warn(`密码验证失败: ${email}`);
-      vercelLogger.auth('login_failed', user.id, false, { reason: 'invalid_password' });
+      console.log(`密码验证失败: ${email}`, { loginId });
       return res.status(401).json({
         success: false,
         message: '邮箱或密码错误',
@@ -186,10 +179,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    requestLogger.info('密码验证成功');
+    console.log('密码验证成功', { loginId });
 
     // 生成JWT token
-    requestLogger.info('生成JWT token');
+    console.log('生成JWT token', { loginId });
     const tokenGenerateStart = Date.now();
     
     const tokenPayload = {
@@ -216,10 +209,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     const tokenGenerateTime = Date.now() - tokenGenerateStart;
-    requestLogger.performance('token_generate', tokenGenerateTime);
+    console.log(`JWT token生成完成 (${tokenGenerateTime}ms)`, { loginId });
 
     // 更新用户最后登录时间
-    requestLogger.info('更新最后登录时间');
+    console.log('更新最后登录时间', { loginId });
     const updateLoginStart = Date.now();
     
     const { error: updateError } = await supabase
@@ -228,17 +221,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', user.id);
 
     const updateLoginTime = Date.now() - updateLoginStart;
-    requestLogger.performance('update_login_time', updateLoginTime);
-    requestLogger.database('update_login_time', 'users', updateLoginTime);
+    console.log(`更新登录时间完成 (${updateLoginTime}ms)`, { loginId });
 
     if (updateError) {
-      requestLogger.warn('更新最后登录时间失败', updateError);
+      console.log('更新最后登录时间失败', { loginId, error: updateError });
     }
 
     const totalTime = Date.now() - startTime;
-    requestLogger.performance('total_login_time', totalTime);
-    requestLogger.info(`登录成功 (总耗时: ${totalTime}ms)`);
-    vercelLogger.auth('login_success', user.id, true, { totalTime });
+    console.log(`登录成功 (总耗时: ${totalTime}ms)`, { loginId, userId: user.id });
 
     // 返回成功响应
     return res.status(200).json({
@@ -266,8 +256,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    requestLogger.error(`登录过程中发生错误 (${totalTime}ms)`, error);
-    vercelLogger.auth('login_failed', undefined, false, { reason: 'server_error', error, totalTime });
+    console.error(`登录过程中发生错误 (${totalTime}ms)`, { loginId, error });
     
     return res.status(500).json({
       success: false,
