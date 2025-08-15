@@ -69,7 +69,7 @@ class VercelLogger {
     return {
       endpoint: req.path || req.url,
       method: req.method,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.headers?.['user-agent'] || (req.get ? req.get('User-Agent') : undefined),
       ip: req.ip || req.connection?.remoteAddress,
       userId: req.user?.id || req.headers['x-user-id']
     };

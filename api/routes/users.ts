@@ -6,11 +6,10 @@ import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcrypt';
 import { supabase } from '../services/supabaseClient';
 import { 
-  authenticateToken, 
-  requireAdmin, 
-  requirePermission,
-  getUserPermissions 
-} from '../middleware/auth.js';
+  authenticateUser, 
+  requireAdmin,
+  type AuthenticatedRequest 
+} from '../middleware/auth';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -19,9 +18,9 @@ const SALT_ROUNDS = 12;
  * 获取当前用户信息
  * GET /api/users/profile
  */
-router.get('/profile', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+router.get('/profile', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user!.id;
 
     // 获取用户详细信息
     const { data: user, error } = await supabase
@@ -42,12 +41,36 @@ router.get('/profile', authenticateToken, async (req: Request, res: Response): P
     const { data: stats } = await supabase
       .rpc('get_user_statistics', { user_uuid: userId });
 
-    // 获取用户权限（添加错误处理，确保权限获取失败不影响用户信息返回）
+    // 获取用户角色和权限
+    let roles: string[] = [];
     let permissions: string[] = [];
+    
     try {
-      permissions = await getUserPermissions(userId);
+      // 获取用户角色
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select(`
+          roles (
+            name
+          )
+        `)
+        .eq('user_id', userId);
+      
+      if (!rolesError && userRoles) {
+        roles = userRoles.map(ur => ur.roles.name);
+      }
+      
+      // 使用数据库函数获取用户权限
+      const { data: userPermissions, error: permError } = await supabase
+        .rpc('get_user_permissions', { user_uuid: userId });
+      
+      if (!permError && userPermissions) {
+        permissions = userPermissions;
+      }
     } catch (error) {
-      console.error('获取用户权限失败，使用空权限列表:', error);
+      console.error('获取用户角色权限失败:', error);
+      // 使用备用逻辑
+      roles = req.user!.role ? [req.user!.role] : [];
       permissions = [];
     }
 
@@ -55,7 +78,7 @@ router.get('/profile', authenticateToken, async (req: Request, res: Response): P
       success: true,
       data: {
         ...user,
-        roles: req.user!.roles,
+        roles,
         permissions,
         statistics: stats?.[0] || {
           total_materials: 0,
@@ -80,9 +103,9 @@ router.get('/profile', authenticateToken, async (req: Request, res: Response): P
  * 更新用户信息
  * PUT /api/users/profile
  */
-router.put('/profile', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+router.put('/profile', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user!.id;
     const { name, organization, avatar_url } = req.body;
 
     // 验证必填字段
@@ -134,9 +157,9 @@ router.put('/profile', authenticateToken, async (req: Request, res: Response): P
  * 修改密码
  * PUT /api/users/password
  */
-router.put('/password', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+router.put('/password', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user!.id;
     const { current_password, new_password } = req.body;
 
     // 验证必填字段
@@ -220,9 +243,9 @@ router.put('/password', authenticateToken, async (req: Request, res: Response): 
  * 获取用户的教材列表
  * GET /api/users/materials
  */
-router.get('/materials', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+router.get('/materials', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user!.id;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
@@ -277,9 +300,9 @@ router.get('/materials', authenticateToken, async (req: Request, res: Response):
  * 获取用户的试题列表
  * GET /api/users/questions
  */
-router.get('/questions', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+router.get('/questions', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user!.id;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const status = req.query.status as string;
@@ -347,9 +370,9 @@ router.get('/questions', authenticateToken, async (req: Request, res: Response):
  * 获取用户的题库（已通过审核的试题）
  * GET /api/users/question-bank
  */
-router.get('/question-bank', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+router.get('/question-bank', authenticateUser, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.userId;
+    const userId = req.user!.id;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
@@ -408,7 +431,7 @@ router.get('/question-bank', authenticateToken, async (req: Request, res: Respon
  * 获取所有用户列表（管理员）
  * GET /api/users/admin/list
  */
-router.get('/admin/list', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.get('/admin/list', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -418,7 +441,7 @@ router.get('/admin/list', authenticateToken, requireAdmin, async (req: Request, 
     let query = supabase
       .from('users')
       .select(`
-        id, email, name, organization, email_verified, created_at, last_login_at,
+        id, email, name, organization, email_verified, status, created_at, last_login_at,
         user_roles!user_roles_user_id_fkey (
           roles (
             name,
@@ -489,11 +512,11 @@ router.get('/admin/list', authenticateToken, requireAdmin, async (req: Request, 
  * 编辑用户信息（管理员）
  * PUT /api/users/admin/:userId
  */
-router.put('/admin/:userId', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.put('/admin/:userId', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
     const { name, email, organization } = req.body;
-    const adminId = req.user!.userId;
+    const adminId = req.user!.id;
 
     // 获取当前用户信息
     const { data: currentUser, error: currentUserError } = await supabase
@@ -584,16 +607,20 @@ router.put('/admin/:userId', authenticateToken, requireAdmin, async (req: Reques
  * 分配用户角色（管理员）
  * PUT /api/users/admin/:userId/role
  */
-router.put('/admin/:userId/role', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.put('/admin/:userId/role', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
-    const { role_name } = req.body;
-    const adminId = req.user!.userId;
+    const { role_name, roleId } = req.body;
+    const adminId = req.user!.id;
 
-    if (!role_name) {
+    // 支持通过role_name或roleId分配角色
+    const roleIdentifier = roleId || role_name;
+    const isRoleId = !!roleId;
+
+    if (!roleIdentifier) {
       res.status(400).json({
         success: false,
-        message: '角色名称为必填字段'
+        message: '角色ID或角色名称为必填字段'
       });
       return;
     }
@@ -602,7 +629,7 @@ router.put('/admin/:userId/role', authenticateToken, requireAdmin, async (req: R
     const { data: role, error: roleError } = await supabase
       .from('roles')
       .select('id, name')
-      .eq('name', role_name)
+      .eq(isRoleId ? 'id' : 'name', roleIdentifier)
       .single();
 
     if (roleError || !role) {
@@ -666,11 +693,99 @@ router.put('/admin/:userId/role', authenticateToken, requireAdmin, async (req: R
 });
 
 /**
+ * 批量分配用户角色（管理员）
+ * PUT /api/users/admin/:userId/roles
+ */
+router.put('/admin/:userId/roles', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { roleIds } = req.body;
+    const adminId = req.user!.id;
+
+    if (!roleIds || !Array.isArray(roleIds) || roleIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: '角色ID列表为必填字段且不能为空'
+      });
+      return;
+    }
+
+    // 验证用户是否存在
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, name')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+      return;
+    }
+
+    // 验证所有角色是否存在
+    const { data: roles, error: rolesError } = await supabase
+      .from('roles')
+      .select('id, name')
+      .in('id', roleIds);
+
+    if (rolesError || !roles || roles.length !== roleIds.length) {
+      res.status(400).json({
+        success: false,
+        message: '部分角色不存在'
+      });
+      return;
+    }
+
+    // 删除用户现有角色
+    await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId);
+
+    // 批量分配新角色
+    const userRoleInserts = roleIds.map(roleId => ({
+      user_id: userId,
+      role_id: roleId,
+      assigned_by: adminId
+    }));
+
+    const { error: assignError } = await supabase
+      .from('user_roles')
+      .insert(userRoleInserts);
+
+    if (assignError) {
+      console.error('批量角色分配失败:', assignError);
+      res.status(500).json({
+        success: false,
+        message: '批量角色分配失败'
+      });
+      return;
+    }
+
+    const roleNames = roles.map(role => role.name).join(', ');
+    res.json({
+      success: true,
+      message: `成功为用户 ${user.name} 分配角色: ${roleNames}`
+    });
+  } catch (error) {
+    console.error('批量分配角色过程中发生错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '服务器内部错误'
+    });
+  }
+});
+
+/**
  * 获取所有角色列表（管理员）
  * GET /api/users/admin/roles
  */
-router.get('/admin/roles', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.get('/admin/roles', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    // 获取角色基本信息
     const { data: roles, error } = await supabase
       .from('roles')
       .select('id, name, description, is_system_role, created_at')
@@ -685,9 +800,37 @@ router.get('/admin/roles', authenticateToken, requireAdmin, async (req: Request,
       return;
     }
 
+    // 为每个角色获取权限信息
+    const rolesWithPermissions = await Promise.all(
+      (roles || []).map(async (role) => {
+        const { data: rolePermissions, error: permError } = await supabase
+          .from('role_permissions')
+          .select(`
+            permissions (
+              name
+            )
+          `)
+          .eq('role_id', role.id);
+
+        if (permError) {
+          console.error(`获取角色 ${role.name} 权限失败:`, permError);
+          return {
+            ...role,
+            permissions: []
+          };
+        }
+
+        const permissions = (rolePermissions || []).map(rp => rp.permissions.name);
+        return {
+          ...role,
+          permissions
+        };
+      })
+    );
+
     res.json({
       success: true,
-      roles: roles || []
+      roles: rolesWithPermissions
     });
   } catch (error) {
     console.error('获取角色列表过程中发生错误:', error);
@@ -702,11 +845,11 @@ router.get('/admin/roles', authenticateToken, requireAdmin, async (req: Request,
  * 切换用户状态（管理员）
  * PUT /api/users/admin/:userId/status
  */
-router.put('/admin/:userId/status', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.put('/admin/:userId/status', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
     const { status } = req.body;
-    const adminId = req.user!.userId;
+    const adminId = req.user!.id;
 
     if (!status || !['active', 'suspended', 'inactive'].includes(status)) {
       res.status(400).json({
@@ -766,10 +909,10 @@ router.put('/admin/:userId/status', authenticateToken, requireAdmin, async (req:
  * 删除用户（管理员）
  * DELETE /api/users/admin/:userId
  */
-router.delete('/admin/:userId', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.delete('/admin/:userId', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
-    const adminId = req.user!.userId;
+    const adminId = req.user!.id;
 
     // 防止管理员删除自己
     if (userId === adminId) {
@@ -840,10 +983,10 @@ router.delete('/admin/:userId', authenticateToken, requireAdmin, async (req: Req
  * 创建新用户（管理员）
  * POST /api/users/admin/create
  */
-router.post('/admin/create', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/admin/create', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { name, email, password, organization } = req.body;
-    const adminId = req.user!.userId;
+    const adminId = req.user!.id;
 
     // 验证必填字段
     if (!name || !email || !password) {
@@ -940,7 +1083,7 @@ router.post('/admin/create', authenticateToken, requireAdmin, async (req: Reques
  * 获取系统统计信息（管理员）
  * GET /api/users/admin/stats
  */
-router.get('/admin/stats', authenticateToken, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.get('/admin/stats', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     // 获取用户统计
     const { count: totalUsers } = await supabase

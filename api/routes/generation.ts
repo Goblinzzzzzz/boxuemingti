@@ -1,8 +1,10 @@
 import express, { type Request, type Response } from 'express';
-import { supabase } from '../services/supabaseClient.js';
-import aiService from '../services/aiService.ts';
-import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization.js';
-import { optimizeMemoryUsage } from '../vercel-compatibility.js';
+import { supabase } from '../services/supabaseClient';
+import { authenticateUser, AuthenticatedRequest } from '../middleware/auth';
+import { aiService } from '../services/aiService';
+import { vercelLogger } from '../vercel-logger';
+import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 const router = express.Router();
 
@@ -13,7 +15,7 @@ if (process.env.VERCEL) {
 }
 
 // 创建生成任务
-router.post('/tasks', async (req: Request, res: Response) => {
+router.post('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const taskId = Date.now().toString(36);
   const monitor = new PerformanceMonitor(`生成任务创建-${taskId}`);
   
@@ -75,6 +77,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       .insert({
         material_id: materialId,
         status: 'pending',
+        created_by: req.user.id,
         parameters: {
           questionCount,
           questionTypes,
@@ -147,7 +150,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
 });
 
 // 获取任务状态
-router.get('/tasks/:id/status', async (req: Request, res: Response) => {
+router.get('/tasks/:id/status', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -155,6 +158,7 @@ router.get('/tasks/:id/status', async (req: Request, res: Response) => {
       .from('generation_tasks')
       .select('*')
       .eq('id', id)
+      .eq('created_by', req.user.id)
       .single();
 
     if (error || !task) {
@@ -194,7 +198,7 @@ router.get('/tasks/:id/status', async (req: Request, res: Response) => {
 });
 
 // 获取任务详情和生成的试题
-router.get('/tasks/:id', async (req: Request, res: Response) => {
+router.get('/tasks/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -202,6 +206,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       .from('generation_tasks')
       .select('*')
       .eq('id', id)
+      .eq('created_by', req.user.id)
       .single();
 
     if (error || !task) {
@@ -233,8 +238,8 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 获取所有生成任务
-router.get('/tasks', async (req: Request, res: Response) => {
+// 获取当前用户的生成任务
+router.get('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { data: tasks, error } = await supabase
       .from('generation_tasks')
@@ -242,6 +247,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
         *,
         materials(title)
       `)
+      .eq('created_by', req.user.id)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -262,12 +268,12 @@ router.get('/tasks', async (req: Request, res: Response) => {
 });
 
 // 重新生成试题
-router.post('/tasks/:id/regenerate', async (req: Request, res: Response) => {
+router.post('/tasks/:id/regenerate', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { questionIds } = req.body;
 
-    // 获取任务信息
+    // 获取任务信息，确保用户只能操作自己的任务
     const { data: task, error: taskError } = await supabase
       .from('generation_tasks')
       .select(`
@@ -275,6 +281,7 @@ router.post('/tasks/:id/regenerate', async (req: Request, res: Response) => {
         materials(*)
       `)
       .eq('id', id)
+      .eq('created_by', req.user.id)
       .single();
 
     if (taskError || !task) {
@@ -397,50 +404,76 @@ async function generateQuestions(
     }
 
     // 使用AI服务生成试题
-    for (let i = 0; i < questionCount; i++) {
-      const questionType = questionTypes[i % questionTypes.length] as '单选题' | '多选题' | '判断题';
-      const currentKnowledgePoint = knowledgePointsData[i % knowledgePointsData.length];
+    let successfulGenerations = 0;
+    let attemptCount = 0;
+    const maxAttempts = questionCount * 2; // 最多尝试2倍的题目数量
+    
+    while (successfulGenerations < questionCount && attemptCount < maxAttempts) {
+      const questionType = questionTypes[successfulGenerations % questionTypes.length] as '单选题' | '多选题' | '判断题';
+      const currentKnowledgePoint = knowledgePointsData[successfulGenerations % knowledgePointsData.length];
       
-      try {
-        const question = await aiService.generateQuestion({
-          content: material.content || material.text_content || '',
-          questionType,
-          difficulty: mapDifficulty(difficulty),
-          knowledgePoint: currentKnowledgePoint?.title
-        });
-
-        if (question) {
-          // 只生成试题数据，不保存到数据库
-          // 试题将在用户点击"提交审核"时才保存到数据库
-          const questionData = {
-            id: `temp_${Date.now()}_${i}`, // 临时ID，用于前端显示
-            task_id: taskId,
-            type: questionType, // 前端期望的字段名
-            question_type: questionType, // 后端数据库字段名
+      // 添加重试机制
+      let retryCount = 0;
+      const maxRetries = 3;
+      let questionGenerated = false;
+      
+      while (!questionGenerated && retryCount < maxRetries) {
+        try {
+          attemptCount++;
+          const question = await aiService.generateQuestion({
+            content: material.content || material.text_content || '',
+            questionType,
             difficulty: mapDifficulty(difficulty),
-            stem: question.stem,
-            options: question.options,
-            correctAnswer: question.correct_answer, // 前端期望的字段名
-            correct_answer: question.correct_answer, // 后端数据库字段名
-            analysis: question.analysis,
-            qualityScore: question.quality_score || 0.5, // 前端期望的字段名
-            quality_score: question.quality_score || 0.5, // 后端数据库字段名
-            knowledge_point_id: currentKnowledgePoint?.id || null,
-            knowledgeLevel: 'HR掌握', // 前端期望的字段名
-            knowledge_level: 'HR掌握', // 后端数据库字段名
-            status: 'pending', // 临时状态，实际保存时会设置为ai_reviewing
-            created_at: new Date().toISOString()
-          };
+            knowledgePoint: currentKnowledgePoint?.title
+          });
+
+          if (question) {
+            console.log(`成功生成第${successfulGenerations + 1}道试题:`, question.stem);
+            
+            // 只生成试题数据，不保存到数据库
+            // 试题将在用户点击"提交审核"时才保存到数据库
+            const questionData = {
+              id: `temp_${Date.now()}_${successfulGenerations}`, // 临时ID，用于前端显示
+              task_id: taskId,
+              type: questionType, // 前端期望的字段名
+              question_type: questionType, // 后端数据库字段名
+              difficulty: mapDifficulty(difficulty),
+              stem: question.stem,
+              options: question.options,
+              correctAnswer: question.correct_answer, // 前端期望的字段名
+              correct_answer: question.correct_answer, // 后端数据库字段名
+              analysis: question.analysis,
+              qualityScore: question.quality_score || 0.5, // 前端期望的字段名
+              quality_score: question.quality_score || 0.5, // 后端数据库字段名
+              knowledge_point_id: currentKnowledgePoint?.id || null,
+              knowledgeLevel: 'HR掌握', // 前端期望的字段名
+              knowledge_level: 'HR掌握', // 后端数据库字段名
+              status: 'pending', // 临时状态，实际保存时会设置为ai_reviewing
+              created_at: new Date().toISOString()
+            };
+            
+            generatedQuestions.push(questionData);
+            successfulGenerations++;
+            questionGenerated = true;
+          } else {
+            throw new Error('AI返回空结果');
+          }
+        } catch (error) {
+          retryCount++;
+          console.error(`生成第${successfulGenerations + 1}道试题失败 (尝试 ${retryCount}/${maxRetries}):`, error);
           
-          generatedQuestions.push(questionData);
+          if (retryCount < maxRetries) {
+            console.log(`等待2秒后重试第${successfulGenerations + 1}道试题...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            console.error(`第${successfulGenerations + 1}道试题生成失败，已达到最大重试次数，跳过此题`);
+            break; // 跳出重试循环，尝试生成下一道题
+          }
         }
-      } catch (error) {
-        console.error(`生成第${i + 1}道试题失败:`, error);
-        // 继续生成其他试题
       }
 
       // 更新进度
-      const progress = Math.floor(((i + 1) / questionCount) * 80) + 10;
+      const progress = Math.floor((successfulGenerations / questionCount) * 80) + 10;
       
       // 首先获取当前的parameters
       const { data: currentTask, error: fetchError } = await supabase
@@ -563,7 +596,7 @@ function mapDifficulty(difficulty: string): '易' | '中' | '难' {
 }
 
 // 获取AI服务状态
-router.get('/ai-status', async (req: Request, res: Response) => {
+router.get('/ai-status', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // 设置缓存控制头，确保前端获取最新状态
     res.set({
@@ -589,7 +622,7 @@ router.get('/ai-status', async (req: Request, res: Response) => {
 });
 
 // 测试AI生成功能
-router.post('/test-generate', async (req: Request, res: Response) => {
+router.post('/test-generate', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { content = '这是测试内容', questionType = '单选题', difficulty = '易' } = req.body;
     

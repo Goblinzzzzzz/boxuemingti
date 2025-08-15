@@ -1,0 +1,50 @@
+{
+  "report": {
+    "timestamp": "2025-08-13T05:33:12.750Z",
+    "aiService": {
+      "provider": "dmxapi",
+      "configured": true,
+      "apiKey": "✅ configured"
+    },
+    "supabase": {
+      "url": "✅ configured",
+      "anonKey": "✅ configured",
+      "serviceKey": "✅ configured"
+    },
+    "security": {
+      "jwtSecret": "✅ configured"
+    }
+  },
+  "commands": [
+    "vercel env add AI_PROVIDER production",
+    "vercel env add AI_PROVIDER preview",
+    "vercel env add AI_PROVIDER development",
+    "vercel env add DMXAPI_API_KEY production",
+    "vercel env add DMXAPI_API_KEY preview",
+    "vercel env add DMXAPI_API_KEY development",
+    "vercel env add DMXAPI_MODEL production",
+    "vercel env add DMXAPI_MODEL preview",
+    "vercel env add DMXAPI_MODEL development",
+    "vercel env add SUPABASE_URL production",
+    "vercel env add SUPABASE_URL preview",
+    "vercel env add SUPABASE_URL development",
+    "vercel env add SUPABASE_ANON_KEY production",
+    "vercel env add SUPABASE_ANON_KEY preview",
+    "vercel env add SUPABASE_ANON_KEY development",
+    "vercel env add SUPABASE_SERVICE_ROLE_KEY production",
+    "vercel env add SUPABASE_SERVICE_ROLE_KEY preview",
+    "vercel env add SUPABASE_SERVICE_ROLE_KEY development",
+    "vercel env add JWT_SECRET production",
+    "vercel env add JWT_SECRET preview",
+    "vercel env add JWT_SECRET development"
+  ],
+  "missingVars": [
+    "DOUBAO_API_KEY",
+    "DOUBAO_MODEL",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_MODEL",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL"
+  ],
+  "generatedAt": "2025-08-13T05:33:12.757Z"
+}

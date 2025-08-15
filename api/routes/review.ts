@@ -1,6 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
-import { questionReviewService } from '../services/questionReviewService.ts';
+import { questionReviewService } from '../services/questionReviewService';
+import { authenticateUser, type AuthenticatedRequest } from '../middleware/auth';
+import { supabase } from '../services/supabaseClient';
+import { aiService } from '../services/aiService';
+import { vercelLogger } from '../vercel-logger';
+import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 // 创建 Supabase 客户端
 const supabase = createClient(
@@ -13,7 +19,7 @@ const router = Router();
 /**
  * 获取待人工审核试题列表（已通过AI审核的试题）
  */
-router.get('/pending', async (req: Request, res: Response) => {
+router.get('/pending', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { page = 1, limit = 10, questionType, difficulty } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
@@ -22,15 +28,17 @@ router.get('/pending', async (req: Request, res: Response) => {
       .from('questions')
       .select(`
         *,
-        generation_tasks(
+        generation_tasks!inner(
           id,
           material_id,
           parameters,
           ai_model,
-          created_at
+          created_at,
+          created_by
         )
       `)
       .eq('status', 'ai_approved')  // 只显示已通过AI审核的试题
+      .eq('generation_tasks.created_by', req.user.id)  // 只显示当前用户的试题
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
 
@@ -53,8 +61,9 @@ router.get('/pending', async (req: Request, res: Response) => {
     // 获取总数
     let countQuery = supabase
       .from('questions')
-      .select('id', { count: 'exact' })
-      .eq('status', 'ai_approved');
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact' })
+      .eq('status', 'ai_approved')
+      .eq('generation_tasks.created_by', req.user.id);
 
     if (questionType) {
       countQuery = countQuery.eq('question_type', questionType);
@@ -93,7 +102,7 @@ router.get('/pending', async (req: Request, res: Response) => {
 /**
  * 获取AI审核中的试题列表
  */
-router.get('/ai-pending', async (req: Request, res: Response) => {
+router.get('/ai-pending', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     console.log('获取AI审核中的试题请求');
     const { page = 1, limit = 10, questionType, difficulty } = req.query;
@@ -103,8 +112,19 @@ router.get('/ai-pending', async (req: Request, res: Response) => {
     console.log('开始构建查询...');
     let query = supabase
       .from('questions')
-      .select('*')
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          material_id,
+          parameters,
+          ai_model,
+          created_at,
+          created_by
+        )
+      `)
       .eq('status', 'ai_reviewing')  // AI审核中的试题
+      .eq('generation_tasks.created_by', req.user.id)  // 只显示当前用户的试题
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
     console.log('查询构建完成，开始执行...');
@@ -129,8 +149,9 @@ router.get('/ai-pending', async (req: Request, res: Response) => {
     // 获取总数
     let countQuery = supabase
       .from('questions')
-      .select('id', { count: 'exact' })
-      .eq('status', 'ai_reviewing');
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact' })
+      .eq('status', 'ai_reviewing')
+      .eq('generation_tasks.created_by', req.user.id);
 
     if (questionType) {
       countQuery = countQuery.eq('question_type', questionType);
@@ -169,7 +190,7 @@ router.get('/ai-pending', async (req: Request, res: Response) => {
 /**
  * 获取AI审核未通过的试题列表
  */
-router.get('/ai-rejected', async (req: Request, res: Response) => {
+router.get('/ai-rejected', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { page = 1, limit = 10, questionType, difficulty } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
@@ -178,15 +199,17 @@ router.get('/ai-rejected', async (req: Request, res: Response) => {
       .from('questions')
       .select(`
         *,
-        generation_tasks(
+        generation_tasks!inner(
           id,
           material_id,
           parameters,
           ai_model,
-          created_at
+          created_at,
+          created_by
         )
       `)
       .eq('status', 'ai_rejected')  // AI审核未通过的试题
+      .eq('generation_tasks.created_by', req.user.id)  // 只显示当前用户的试题
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
 
@@ -207,8 +230,9 @@ router.get('/ai-rejected', async (req: Request, res: Response) => {
     // 获取总数
     let countQuery = supabase
       .from('questions')
-      .select('id', { count: 'exact' })
-      .eq('status', 'ai_rejected');
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact' })
+      .eq('status', 'ai_rejected')
+      .eq('generation_tasks.created_by', req.user.id);
 
     if (questionType) {
       countQuery = countQuery.eq('question_type', questionType);
@@ -247,15 +271,22 @@ router.get('/ai-rejected', async (req: Request, res: Response) => {
 /**
  * 对单个试题进行AI自动审核
  */
-router.post('/:questionId/auto-review', async (req: Request, res: Response) => {
+router.post('/:questionId/auto-review', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionId } = req.params;
 
-    // 获取试题信息
+    // 获取试题信息（只能审核当前用户的试题）
     const { data: question, error: fetchError } = await supabase
       .from('questions')
-      .select('*')
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          created_by
+        )
+      `)
       .eq('id', questionId)
+      .eq('generation_tasks.created_by', req.user.id)
       .single();
 
     if (fetchError || !question) {
@@ -309,7 +340,7 @@ router.post('/:questionId/auto-review', async (req: Request, res: Response) => {
 /**
  * 批量AI自动审核
  */
-router.post('/batch-auto-review', async (req: Request, res: Response) => {
+router.post('/batch-auto-review', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionIds } = req.body;
 
@@ -320,11 +351,18 @@ router.post('/batch-auto-review', async (req: Request, res: Response) => {
       });
     }
 
-    // 获取试题信息
+    // 获取试题信息（只能审核当前用户的试题）
     const { data: questions, error: fetchError } = await supabase
       .from('questions')
-      .select('*')
-      .in('id', questionIds);
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          created_by
+        )
+      `)
+      .in('id', questionIds)
+      .eq('generation_tasks.created_by', req.user.id);
 
     if (fetchError) {
       throw fetchError;
@@ -392,7 +430,7 @@ router.post('/batch-auto-review', async (req: Request, res: Response) => {
 /**
  * 人工审核试题（通过/拒绝）
  */
-router.post('/:questionId/manual-review', async (req: Request, res: Response) => {
+router.post('/:questionId/manual-review', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionId } = req.params;
     const { action, reason } = req.body; // action: 'approve' | 'reject'
@@ -404,12 +442,19 @@ router.post('/:questionId/manual-review', async (req: Request, res: Response) =>
       });
     }
 
-    // 获取试题信息（只能审核已通过AI审核的试题）
+    // 获取试题信息（只能审核已通过AI审核且属于当前用户的试题）
     const { data: question, error: fetchError } = await supabase
       .from('questions')
-      .select('*')
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          created_by
+        )
+      `)
       .eq('id', questionId)
       .eq('status', 'ai_approved')
+      .eq('generation_tasks.created_by', req.user.id)
       .single();
 
     if (fetchError || !question) {
@@ -464,7 +509,7 @@ router.post('/:questionId/manual-review', async (req: Request, res: Response) =>
 /**
  * 批量人工审核
  */
-router.post('/batch-manual-review', async (req: Request, res: Response) => {
+router.post('/batch-manual-review', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionIds, action, reason } = req.body;
 
@@ -484,6 +529,32 @@ router.post('/batch-manual-review', async (req: Request, res: Response) => {
 
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
 
+    // 首先验证这些试题是否属于当前用户
+    const { data: userQuestions, error: verifyError } = await supabase
+      .from('questions')
+      .select(`
+        id,
+        generation_tasks!inner(
+          created_by
+        )
+      `)
+      .in('id', questionIds)
+      .eq('status', 'ai_approved')
+      .eq('generation_tasks.created_by', req.user.id);
+
+    if (verifyError) {
+      throw verifyError;
+    }
+
+    const validQuestionIds = userQuestions?.map(q => q.id) || [];
+    
+    if (validQuestionIds.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: '没有找到属于您的待审核试题'
+      });
+    }
+
     // 批量更新试题状态
     const { data: updatedQuestions, error: updateError } = await supabase
       .from('questions')
@@ -499,7 +570,7 @@ router.post('/batch-manual-review', async (req: Request, res: Response) => {
         },
         updated_at: new Date().toISOString()
       })
-      .in('id', questionIds)
+      .in('id', validQuestionIds)
       .eq('status', 'ai_approved')  // 只能审核已通过AI审核的试题
       .select('id');
 
@@ -530,15 +601,22 @@ router.post('/batch-manual-review', async (req: Request, res: Response) => {
 /**
  * AI审核单个试题
  */
-router.post('/ai-review/:questionId', async (req: Request, res: Response) => {
+router.post('/ai-review/:questionId', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionId } = req.params;
 
-    // 获取试题信息
+    // 获取试题信息（只能审核当前用户的试题）
     const { data: question, error: fetchError } = await supabase
       .from('questions')
-      .select('*')
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          created_by
+        )
+      `)
       .eq('id', questionId)
+      .eq('generation_tasks.created_by', req.user.id)
       .single();
 
     if (fetchError || !question) {
@@ -601,7 +679,7 @@ router.post('/ai-review/:questionId', async (req: Request, res: Response) => {
 /**
  * 批量AI审核
  */
-router.post('/batch-ai-review', async (req: Request, res: Response) => {
+router.post('/batch-ai-review', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionIds } = req.body;
 
@@ -612,11 +690,18 @@ router.post('/batch-ai-review', async (req: Request, res: Response) => {
       });
     }
 
-    // 获取试题信息
+    // 获取试题信息（只能审核当前用户的试题）
     const { data: questions, error: fetchError } = await supabase
       .from('questions')
-      .select('*')
-      .in('id', questionIds);
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          created_by
+        )
+      `)
+      .in('id', questionIds)
+      .eq('generation_tasks.created_by', req.user.id);
 
     if (fetchError) {
       throw fetchError;
@@ -697,7 +782,7 @@ router.post('/batch-ai-review', async (req: Request, res: Response) => {
 /**
  * 提交试题到审核流程
  */
-router.post('/submit', async (req: Request, res: Response) => {
+router.post('/submit', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questions, generationTaskId } = req.body;
 
@@ -706,6 +791,23 @@ router.post('/submit', async (req: Request, res: Response) => {
         success: false,
         error: '请提供有效的试题列表'
       });
+    }
+
+    // 验证生成任务是否属于当前用户
+    if (generationTaskId) {
+      const { data: task, error: taskError } = await supabase
+        .from('generation_tasks')
+        .select('id, created_by')
+        .eq('id', generationTaskId)
+        .eq('created_by', req.user.id)
+        .single();
+
+      if (taskError || !task) {
+        return res.status(403).json({
+          success: false,
+          error: '无权访问该生成任务'
+        });
+      }
     }
 
     // 准备插入数据
@@ -748,7 +850,7 @@ router.post('/submit', async (req: Request, res: Response) => {
 /**
  * 批量审核通过并保存到题库
  */
-router.post('/batch-approve', async (req: Request, res: Response) => {
+router.post('/batch-approve', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionIds } = req.body;
 
@@ -759,12 +861,19 @@ router.post('/batch-approve', async (req: Request, res: Response) => {
       });
     }
 
-    // 获取待审核的试题
+    // 获取待审核的试题（只能操作当前用户的试题）
     const { data: questions, error: fetchError } = await supabase
       .from('questions')
-      .select('*')
+      .select(`
+        *,
+        generation_tasks!inner(
+          id,
+          created_by
+        )
+      `)
       .in('id', questionIds)
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .eq('generation_tasks.created_by', req.user.id);
 
     if (fetchError) {
       throw fetchError;
@@ -821,30 +930,34 @@ router.post('/batch-approve', async (req: Request, res: Response) => {
 /**
  * 获取审核统计信息
  */
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // 获取待审核试题数量
+    // 获取待审核试题数量（当前用户）
     const { count: pendingCount } = await supabase
       .from('questions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .eq('generation_tasks.created_by', req.user.id);
 
-    // 获取已通过试题数量
+    // 获取已通过试题数量（当前用户）
     const { count: approvedCount } = await supabase
       .from('questions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved');
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact', head: true })
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id);
 
-    // 获取已拒绝试题数量
+    // 获取已拒绝试题数量（当前用户）
     const { count: rejectedCount } = await supabase
       .from('questions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'rejected');
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact', head: true })
+      .eq('status', 'rejected')
+      .eq('generation_tasks.created_by', req.user.id);
 
-    // 获取总试题数量
+    // 获取总试题数量（当前用户）
     const { count: totalCount } = await supabase
       .from('questions')
-      .select('*', { count: 'exact', head: true });
+      .select('id, generation_tasks!inner(created_by)', { count: 'exact', head: true })
+      .eq('generation_tasks.created_by', req.user.id);
 
     res.json({
       success: true,
@@ -867,12 +980,32 @@ router.get('/stats', async (req: Request, res: Response) => {
 /**
  * 通过审核（单个试题）
  */
-router.post('/approve/:questionId', async (req: Request, res: Response) => {
+router.post('/approve/:questionId', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionId } = req.params;
     const { feedback } = req.body;
 
     console.log('审核通过试题:', questionId, '反馈:', feedback);
+
+    // 首先验证试题是否属于当前用户
+    const { data: question, error: verifyError } = await supabase
+      .from('questions')
+      .select(`
+        id,
+        generation_tasks!inner(
+          created_by
+        )
+      `)
+      .eq('id', questionId)
+      .eq('generation_tasks.created_by', req.user.id)
+      .single();
+
+    if (verifyError || !question) {
+      return res.status(404).json({
+        success: false,
+        error: '试题不存在或无权访问'
+      });
+    }
 
     // 更新试题状态为已通过
     const { data, error } = await supabase
@@ -919,12 +1052,32 @@ router.post('/approve/:questionId', async (req: Request, res: Response) => {
 /**
  * 拒绝审核（单个试题）
  */
-router.post('/reject/:questionId', async (req: Request, res: Response) => {
+router.post('/reject/:questionId', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { questionId } = req.params;
     const { feedback, rejection_reason } = req.body;
 
     console.log('拒绝审核试题:', questionId, '反馈:', feedback, '拒绝原因:', rejection_reason);
+
+    // 首先验证试题是否属于当前用户
+    const { data: question, error: verifyError } = await supabase
+      .from('questions')
+      .select(`
+        id,
+        generation_tasks!inner(
+          created_by
+        )
+      `)
+      .eq('id', questionId)
+      .eq('generation_tasks.created_by', req.user.id)
+      .single();
+
+    if (verifyError || !question) {
+      return res.status(404).json({
+        success: false,
+        error: '试题不存在或无权访问'
+      });
+    }
 
     // 更新试题状态为已拒绝
     const { data, error } = await supabase

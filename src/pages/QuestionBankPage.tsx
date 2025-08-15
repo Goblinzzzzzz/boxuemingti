@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Search, Filter, Download, Eye, Edit, Trash2, Database, CheckSquare, Square, FileText, FileSpreadsheet, Loader2 } from 'lucide-react'
-import { supabase, type Question, type KnowledgePoint } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
+import type { Question, KnowledgePoint } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { QuestionBankSkeleton } from '@/components/common/SkeletonLoader'
@@ -78,18 +79,24 @@ export default function QuestionBankPage() {
   // 获取试题列表
   const fetchQuestions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('questions')
-        .select(`
-          *,
-          knowledge_point:knowledge_points(*)
-        `)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      setQuestions(data || [])
+      const token = localStorage.getItem('access_token')
+      const response = await fetch('/api/questions', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (response.ok) {
+        const result = await response.json()
+        setQuestions(result.data || [])
+      } else {
+        console.error('获取试题失败:', response.statusText)
+        setQuestions([]) // 确保失败时设置为空数组
+        toast.error('获取试题失败')
+      }
     } catch (error) {
       console.error('获取试题失败:', error)
+      setQuestions([]) // 确保失败时设置为空数组
       toast.error('获取试题失败')
     } finally {
       setLoading(false)
@@ -99,6 +106,7 @@ export default function QuestionBankPage() {
   // 获取知识点列表
   const fetchKnowledgePoints = async () => {
     try {
+      // 直接使用Supabase客户端，与其他页面保持一致
       const { data, error } = await supabase
         .from('knowledge_points')
         .select('*')
@@ -108,6 +116,8 @@ export default function QuestionBankPage() {
       setKnowledgePoints(data || [])
     } catch (error) {
       console.error('获取知识点失败:', error)
+      setKnowledgePoints([]) // 确保失败时设置为空数组
+      toast.error('获取知识点失败')
     }
   }
 
@@ -121,9 +131,11 @@ export default function QuestionBankPage() {
     if (!confirm('确定要删除这道试题吗？')) return
     
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch(`/api/questions/${id}`, {
         method: 'DELETE',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       })
@@ -156,9 +168,11 @@ export default function QuestionBankPage() {
     if (!confirm(`确定要删除选中的 ${selectedQuestions.size} 道试题吗？`)) return
     
     try {
-      const response = await fetch('/api/questions', {
+      const token = localStorage.getItem('access_token')
+      const response = await fetch('/api/questions/batch', {
         method: 'DELETE',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -213,7 +227,7 @@ export default function QuestionBankPage() {
   }
 
   // 过滤试题
-  const filteredQuestions = questions.filter(question => {
+  const filteredQuestions = (Array.isArray(questions) ? questions : []).filter(question => {
     const matchesSearch = 
       question.stem.toLowerCase().includes(searchTerm.toLowerCase()) ||
       question.knowledge_point?.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -268,65 +282,38 @@ export default function QuestionBankPage() {
 
     setExporting(true)
     try {
-      const exportData = questionsToExport.map(q => ({
-        知识点: q.knowledge_point?.title || '',
-        知识点分级: q.knowledge_point?.level || '',
-        题型: q.question_type,
-        难度: q.difficulty,
-        题干: q.stem,
-        选项A: q.options[0] || '',
-        选项B: q.options[1] || '',
-        选项C: q.options[2] || '',
-        选项D: q.options[3] || '',
-        正确答案: q.correct_answer,
-        教材原文: q.analysis.textbook || '',
-        试题分析: q.analysis.explanation || '',
-        答案结论: q.analysis.conclusion || '',
-        创建时间: new Date(q.created_at).toLocaleString()
-      }))
-
-      let blob: Blob
-      let filename: string
-      const timestamp = new Date().toISOString().split('T')[0]
-
-      switch (format) {
-        case 'csv':
-          const csv = [
-            Object.keys(exportData[0] || {}).join(','),
-            ...exportData.map(row => Object.values(row).map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
-          ].join('\n')
-          blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-          filename = `试题库_${timestamp}.csv`
-          break
-        
-        case 'json':
-          blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json;charset=utf-8;' })
-          filename = `试题库_${timestamp}.json`
-          break
-        
-        case 'word':
-          // 简化的Word格式（实际项目中可能需要使用专门的库）
-          const wordContent = exportData.map((q, index) => 
-            `${index + 1}. ${q.题干}\n` +
-            `A. ${q.选项A}\nB. ${q.选项B}\nC. ${q.选项C}\nD. ${q.选项D}\n` +
-            `正确答案：${q.正确答案}\n` +
-            `解析：${q.试题分析}\n\n`
-          ).join('')
-          blob = new Blob([wordContent], { type: 'application/msword;charset=utf-8;' })
-          filename = `试题库_${timestamp}.doc`
-          break
-        
-        default:
-          throw new Error('不支持的导出格式')
-      }
-
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = filename
-      link.click()
+      const token = localStorage.getItem('access_token')
+      const questionIds = questionsToExport.map(q => q.id)
+      const response = await fetch('/api/questions/export', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          format,
+          questionIds: questionIds.length === filteredQuestions.length ? [] : questionIds // 空数组表示导出所有
+        })
+      })
       
-      toast.success(`成功导出 ${questionsToExport.length} 道试题`)
-      setShowExportOptions(false)
+      if (response.ok) {
+        const blob = await response.blob()
+        const contentDisposition = response.headers.get('Content-Disposition')
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1]?.replace(/"/g, '') 
+          : `试题库_${new Date().toISOString().split('T')[0]}.${format}`
+        
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = filename
+        link.click()
+        
+        toast.success(`成功导出 ${questionsToExport.length} 道试题`)
+        setShowExportOptions(false)
+      } else {
+        console.error('导出失败:', response.statusText)
+        toast.error('导出失败')
+      }
     } catch (error) {
       console.error('导出失败:', error)
       toast.error('导出失败')
@@ -338,17 +325,18 @@ export default function QuestionBankPage() {
 
 
   // 统计信息
+  const safeQuestions = Array.isArray(questions) ? questions : []
   const stats = {
-    total: questions.length,
+    total: safeQuestions.length,
     byType: {
-      '单选题': questions.filter(q => q.question_type === '单选题').length,
-      '多选题': questions.filter(q => q.question_type === '多选题').length,
-      '判断题': questions.filter(q => q.question_type === '判断题').length
+      '单选题': safeQuestions.filter(q => q.question_type === '单选题').length,
+      '多选题': safeQuestions.filter(q => q.question_type === '多选题').length,
+      '判断题': safeQuestions.filter(q => q.question_type === '判断题').length
     },
     byDifficulty: {
-      '易': questions.filter(q => q.difficulty === '易').length,
-      '中': questions.filter(q => q.difficulty === '中').length,
-      '难': questions.filter(q => q.difficulty === '难').length
+      '易': safeQuestions.filter(q => q.difficulty === '易').length,
+      '中': safeQuestions.filter(q => q.difficulty === '中').length,
+      '难': safeQuestions.filter(q => q.difficulty === '难').length
     }
   }
 
@@ -616,7 +604,7 @@ export default function QuestionBankPage() {
           <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
             {filteredQuestions.length === 0 ? (
               <div className="p-6 text-center text-gray-500">
-                {questions.length === 0 ? '暂无试题数据' : '没有符合条件的试题'}
+                {(Array.isArray(questions) ? questions : []).length === 0 ? '暂无试题数据' : '没有符合条件的试题'}
               </div>
             ) : (
               filteredQuestions.map((question) => (

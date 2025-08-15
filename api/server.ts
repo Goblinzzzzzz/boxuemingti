@@ -1,7 +1,7 @@
 /**
  * local server entry file, for local development
  */
-import app from './app.ts';
+import app from './app';
 
 /**
  * start server with port

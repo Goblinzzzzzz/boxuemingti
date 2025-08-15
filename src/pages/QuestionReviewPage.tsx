@@ -222,7 +222,13 @@ export default function QuestionReviewPage() {
         endpoint = '/api/review/ai-rejected' // ai_rejected
       }
       
-      const response = await fetch(endpoint)
+      const token = localStorage.getItem('access_token')
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
       if (response.ok) {
         const result = await response.json()
         console.log('API返回数据:', result)
@@ -302,9 +308,11 @@ export default function QuestionReviewPage() {
     setValidationResult(localValidation)
     
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch(`/api/review/ai-review/${question.id}`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -360,9 +368,11 @@ export default function QuestionReviewPage() {
         return
       }
 
+      const token = localStorage.getItem('access_token')
       const response = await fetch('/api/review/batch-ai-review', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ questionIds })
@@ -478,9 +488,11 @@ export default function QuestionReviewPage() {
   // 人工审核操作
   const approveQuestion = async (questionId: string) => {
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch(`/api/review/approve/${questionId}`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -514,9 +526,11 @@ export default function QuestionReviewPage() {
 
     try {
       const questionIds = pendingQuestions.map(q => q.id)
+      const token = localStorage.getItem('access_token')
       const response = await fetch('/api/review/batch-approve', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ questionIds })
@@ -541,9 +555,11 @@ export default function QuestionReviewPage() {
 
   const rejectQuestion = async (questionId: string) => {
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch(`/api/review/reject/${questionId}`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -580,9 +596,11 @@ export default function QuestionReviewPage() {
 
     try {
       setSaving(true)
+      const token = localStorage.getItem('access_token')
       const response = await fetch(`/api/questions/${editingQuestion.id}`, {
         method: 'PUT',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(editingQuestion)

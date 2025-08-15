@@ -1,44 +1,36 @@
+# Vercel ignore file
+# 排除可能导致runtime冲突的文件
+
+# Node modules
 node_modules
-build
-dist
-.git
-.trae
-.log
 
-# 排除根目录下的脚本文件，避免被识别为Serverless Functions
-*.js
-*.cjs
-*.mjs
+# Development files
+*.log
+.env.local
+.env.development
 
-# 只允许必要的配置文件
-!vite.config.js
-!tailwind.config.js
-!postcss.config.js
-!eslint.config.js
+# TypeScript source files (保留编译后的文件)
+src/
 
-# 允许 api 目录下的所有文件作为 Serverless Functions
-!api/**/*.js
-!api/**/*.ts
+# API TypeScript config (避免冲突)
+api/tsconfig.json
 
-# 明确排除所有测试和工具脚本
-add-*.js
-assign-*.js
-check-*.js
-clear-*.js
-create-*.js
-fix-*.js
-insert-*.js
-reset-*.js
-setup-*.js
-test-*.js
-verify-*.js
-scripts/
+# Test files
+*.test.*
+*.spec.*
+test/
+tests/
 
-# 排除其他可能的脚本文件
-*.test.js
-*.spec.js
-*.config.js
-!vite.config.js
-!tailwind.config.js
-!postcss.config.js
-!eslint.config.js
+# Documentation
+*.md
+README*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

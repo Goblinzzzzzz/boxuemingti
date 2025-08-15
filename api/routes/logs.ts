@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
-import { vercelLogger } from '../vercel-logger.js';
-import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { vercelLogger } from '../vercel-logger';
+import { authenticateUser, requireAdmin } from '../middleware/auth';
 
 // 内存中的日志存储（生产环境应该使用持久化存储）
 interface LogEntry {
@@ -75,7 +75,7 @@ router.get('/test', async (req: Request, res: Response) => {
  * Vercel 函数日志查看器
  * GET /api/logs
  */
-router.get('/', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.get('/', authenticateUser, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { limit = 100, level = 'all', startTime, endTime } = req.query;
     const limitNum = parseInt(limit as string);
@@ -131,7 +131,7 @@ router.get('/', authenticateToken, requireRole(['admin']), async (req: Request, 
  * 请求追踪接口
  * GET /api/logs/trace/:requestId
  */
-router.get('/trace/:requestId', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.get('/trace/:requestId', authenticateUser, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { requestId } = req.params;
     
@@ -178,7 +178,7 @@ router.get('/trace/:requestId', authenticateToken, requireRole(['admin']), async
  * 实时日志流接口
  * GET /api/logs/stream
  */
-router.get('/stream', authenticateToken, requireRole(['admin']), (req: Request, res: Response) => {
+router.get('/stream', authenticateUser, requireAdmin, (req: Request, res: Response) => {
   // 设置 SSE 头
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -218,7 +218,7 @@ router.get('/stream', authenticateToken, requireRole(['admin']), (req: Request, 
  * 错误统计接口
  * GET /api/logs/stats
  */
-router.get('/stats', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.get('/stats', authenticateUser, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { period = '24h' } = req.query;
     

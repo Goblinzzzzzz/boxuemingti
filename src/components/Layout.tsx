@@ -32,6 +32,7 @@ const navigation = [
   { name: '题库管理', href: '/question-bank', icon: Database },
   { name: '用户管理', href: '/admin/users', icon: Users },
   { name: '系统管理', href: '/admin/system', icon: Shield },
+  { name: '权限调试', href: '/debug-permissions', icon: Shield },
 ]
 
 export default function Layout({ children }: LayoutProps) {
@@ -91,7 +92,7 @@ export default function Layout({ children }: LayoutProps) {
               } else if (item.href === '/ai-generator') {
                 permissionConfig = { permissions: ['questions.generate'] }
               } else if (item.href === '/question-review') {
-                permissionConfig = { roles: ['reviewer', 'admin'] }
+                permissionConfig = { permissions: ['questions.review'] }
               } else if (item.href === '/admin/users') {
                 permissionConfig = { roles: ['admin'] }
               } else if (item.href === '/admin/system') {

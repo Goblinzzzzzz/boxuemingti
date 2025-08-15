@@ -81,7 +81,17 @@ export const useAuthStore = create<AuthStore>()(
               error: null
             });
             
-            console.log('认证状态已设置，用户已登录');
+            console.log('认证状态已设置，开始获取完整用户权限信息');
+            
+            // 获取完整的用户权限信息
+            try {
+              await get().getCurrentUser();
+              console.log('用户权限信息获取成功');
+            } catch (permissionError) {
+              console.warn('获取用户权限信息失败，但登录成功:', permissionError);
+              // 不影响登录流程，权限信息可以稍后获取
+            }
+            
             return true;
           } else {
             console.log('登录失败:', response.message);
@@ -454,8 +464,8 @@ export const usePermissions = () => {
     isAdmin: () => hasRole('admin'),
     isReviewer: () => hasRole('reviewer'),
     isUser: () => hasRole('user'),
-    canManageUsers: () => hasPermission('users:manage'),
-    canReviewQuestions: () => hasPermission('questions:review'),
-    canCreateQuestions: () => hasPermission('questions:create')
+    canManageUsers: () => hasPermission('users.manage'),
+    canReviewQuestions: () => hasPermission('questions.review'),
+    canCreateQuestions: () => hasPermission('questions.create')
   };
 };

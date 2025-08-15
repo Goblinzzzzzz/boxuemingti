@@ -72,16 +72,16 @@ export default function MaterialInputPage() {
   }
 
   const handleFiles = (files: File[]) => {
-    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
+    const validTypes = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
     const validFiles: File[] = []
     const invalidFiles: {name: string, reason: string}[] = []
     
     // 验证文件类型和大小
     for (const file of files) {
       // 检查文件类型
-      const isValidType = validTypes.includes(file.type) || file.name.endsWith('.txt')
+      const isValidType = validTypes.includes(file.type) || file.name.endsWith('.txt') || file.name.endsWith('.docx')
       if (!isValidType) {
-        invalidFiles.push({name: file.name, reason: '不支持的文件类型'})
+        invalidFiles.push({name: file.name, reason: '仅支持Word(.docx)和文本(.txt)格式'})
         continue
       }
       
@@ -89,15 +89,6 @@ export default function MaterialInputPage() {
       if (file.size > 10 * 1024 * 1024) {
         invalidFiles.push({name: file.name, reason: '文件大小超过10MB限制'})
         continue
-      }
-      
-      // 特殊检查PDF文件
-      if (file.type === 'application/pdf') {
-        // 检查文件名是否包含中文（可能导致编码问题）
-        const hasChinese = /[\u4e00-\u9fa5]/.test(file.name)
-        if (hasChinese) {
-          console.warn(`警告: PDF文件名 ${file.name} 包含中文字符，可能导致编码问题`)
-        }
       }
       
       validFiles.push(file)
@@ -139,20 +130,28 @@ export default function MaterialInputPage() {
   }
 
   const getFileIcon = (type: string, name: string) => {
-    if (type === 'application/pdf' || name.endsWith('.pdf')) {
-      return <File className="h-8 w-8 text-red-500" />
-    }
     if (type.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) {
       return <File className="h-8 w-8 text-blue-500" />
     }
     return <FileText className="h-8 w-8 text-gray-500" />
   }
 
+  // 获取认证token的工具函数
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('access_token')
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    }
+  }
+
   // 获取已上传的教材列表
   const fetchMaterials = async () => {
     setLoadingMaterials(true)
     try {
-      const response = await fetch('/api/materials')
+      const response = await fetch('/api/materials', {
+        headers: getAuthHeaders()
+      })
       if (response.ok) {
         const result = await response.json()
         setMaterials(result.data || [])
@@ -182,7 +181,9 @@ export default function MaterialInputPage() {
     // 如果没有内容，则获取详细信息
     if (!material.content) {
       try {
-        const response = await fetch(`/api/materials/${material.id}`)
+        const response = await fetch(`/api/materials/${material.id}`, {
+          headers: getAuthHeaders()
+        })
         if (response.ok) {
           const result = await response.json()
           setEditContent(result.data.content || '')
@@ -208,9 +209,7 @@ export default function MaterialInputPage() {
     try {
       const response = await fetch(`/api/materials/${editingMaterial.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           title: editTitle,
           content: editContent
@@ -236,7 +235,8 @@ export default function MaterialInputPage() {
     
     try {
       const response = await fetch(`/api/materials/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       })
       
       if (response.ok) {
@@ -264,15 +264,12 @@ export default function MaterialInputPage() {
         // 提交文本内容
         console.log('提交文本内容，标题:', materialTitle, '内容长度:', textContent.length)
         try {
-          const response = await fetch('/api/materials', {
+          const response = await fetch('/api/materials/analyze', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
               title: materialTitle,
-              content: textContent,
-              type: 'text'
+              materialText: textContent
             })
           })
           
@@ -315,8 +312,12 @@ export default function MaterialInputPage() {
             
             try {
               console.log('发送文件上传请求...')
+              const token = localStorage.getItem('access_token')
               const response = await fetch('/api/materials/upload', {
                 method: 'POST',
+                headers: {
+                  ...(token && { 'Authorization': `Bearer ${token}` })
+                },
                 body: formData
               })
               
@@ -463,13 +464,13 @@ export default function MaterialInputPage() {
                       type="file"
                       className="sr-only"
                       multiple
-                      accept=".pdf,.doc,.docx,.txt"
+                      accept=".doc,.docx,.txt"
                       onChange={handleFileInput}
                     />
                   </label>
                 </div>
                 <p className="mt-2 text-sm text-gray-500">
-                  支持 PDF、Word、TXT 格式，单个文件最大 10MB
+                  支持 Word、TXT 格式，单个文件最大 10MB
                 </p>
               </div>
 
@@ -575,9 +576,7 @@ export default function MaterialInputPage() {
                       <div className="p-4">
                         <div className="flex justify-between items-start">
                           <div className="flex items-start space-x-3">
-                            {material.file_type === 'application/pdf' ? (
-                              <File className="h-8 w-8 text-red-500 flex-shrink-0" />
-                            ) : material.file_type === 'text' ? (
+                            {material.file_type === 'text' ? (
                               <FileText className="h-8 w-8 text-gray-500 flex-shrink-0" />
                             ) : (
                               <File className="h-8 w-8 text-blue-500 flex-shrink-0" />
@@ -589,8 +588,7 @@ export default function MaterialInputPage() {
                                   {new Date(material.created_at).toLocaleString()}
                                 </span>
                                 <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">
-                                  {material.file_type === 'application/pdf' ? 'PDF文档' : 
-                                   material.file_type === 'text' ? '文本内容' : 
+                                  {material.file_type === 'text' ? '文本内容' : 
                                    material.file_type === 'application/msword' ? 'Word文档' : 
                                    '文档'}
                                 </span>
@@ -703,12 +701,43 @@ export default function MaterialInputPage() {
                   )}
                   
                   {editingMaterial.file_type !== 'text' && (
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <AlertCircle className="h-5 w-5 text-amber-500 mr-2" />
-                        <p className="text-sm text-gray-700">
-                          上传的文档内容不支持在线编辑，仅可修改标题。如需修改内容，请重新上传文档。
-                        </p>
+                    <div className="space-y-4">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <div className="flex items-center">
+                          <AlertCircle className="h-5 w-5 text-amber-500 mr-2" />
+                          <p className="text-sm text-gray-700">
+                            上传的文档内容不支持在线编辑，仅可修改标题。如需修改内容，请重新上传文档。
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            已识别内容预览
+                          </label>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(editingMaterial.content || '')
+                              // 可以添加复制成功的提示
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                            title="复制内容"
+                          >
+                            <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            复制
+                          </button>
+                        </div>
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                          <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                            {editingMaterial.content || '暂无内容'}
+                          </pre>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500 text-right">
+                          {editingMaterial.content ? `${editingMaterial.content.length} 字符` : '0 字符'}
+                        </div>
                       </div>
                     </div>
                   )}

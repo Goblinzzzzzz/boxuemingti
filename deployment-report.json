@@ -1,0 +1,14 @@
+{
+  "timestamp": "2025-08-13T03:28:40.882Z",
+  "deploymentUrl": "https://traemingtivtvj-6mxzfyeck-kehrs-projects-ef0ee98f.vercel.app",
+  "success": true,
+  "errors": [],
+  "warnings": [
+    "未检测到Vercel认证，可能需要运行: vercel login"
+  ],
+  "summary": {
+    "totalErrors": 0,
+    "totalWarnings": 1,
+    "deploymentStatus": "成功"
+  }
+}

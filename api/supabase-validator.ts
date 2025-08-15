@@ -3,8 +3,8 @@
  * 专门用于验证生产环境中的 Supabase 连接和权限配置
  */
 
-import { supabase } from './services/supabaseClient.js';
-import { vercelLogger } from './vercel-logger.js';
+import { supabase } from './services/supabaseClient';
+import { vercelLogger } from './vercel-logger';
 
 export interface ValidationResult {
   success: boolean;

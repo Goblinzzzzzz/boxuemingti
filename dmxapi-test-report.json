@@ -1,0 +1,56 @@
+{
+  "timestamp": "2025-08-14T08:20:27.881Z",
+  "summary": {
+    "total": 4,
+    "switchSuccess": 4,
+    "generateSuccess": 0,
+    "taskSuccess": 4,
+    "fullyWorking": 0
+  },
+  "results": [
+    {
+      "model": "GPT-5 Mini",
+      "provider": "dmxapi",
+      "modelId": "gpt-5-mini",
+      "switchSuccess": true,
+      "generateSuccess": false,
+      "taskSuccess": true,
+      "errors": [
+        "生成测试失败: AI生成试题失败: AI响应解析失败: 无法找到JSON格式响应。所有可用模型都无法正常工作，请检查API配置或稍后重试。"
+      ]
+    },
+    {
+      "model": "GPT-4.1 Mini",
+      "provider": "dmxapi",
+      "modelId": "gpt-4.1-mini",
+      "switchSuccess": true,
+      "generateSuccess": false,
+      "taskSuccess": true,
+      "errors": [
+        "生成测试失败: undefined"
+      ]
+    },
+    {
+      "model": "Claude Opus 4",
+      "provider": "dmxapi",
+      "modelId": "claude-opus-4-20250514-ssvip",
+      "switchSuccess": true,
+      "generateSuccess": false,
+      "taskSuccess": true,
+      "errors": [
+        "生成测试失败: undefined"
+      ]
+    },
+    {
+      "model": "Gemini 2.5 Pro",
+      "provider": "dmxapi",
+      "modelId": "gemini-2.5-pro",
+      "switchSuccess": true,
+      "generateSuccess": false,
+      "taskSuccess": true,
+      "errors": [
+        "生成测试失败: undefined"
+      ]
+    }
+  ]
+}

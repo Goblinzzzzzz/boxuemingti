@@ -2,41 +2,32 @@
 
 ## 概述
 
-本项目支持三种AI服务提供商：
-- **豆包** (字节跳动) - 推荐使用
-- **DeepSeek** - 性价比高
-- **OpenAI** - 可选
+本项目使用 **DMXAPI** 作为唯一的AI服务提供商，支持多种先进的AI模型：
+- **GPT-5 Mini** - 默认推荐模型
+- **GPT-4o Mini** - 性能优异
+- **GPT-4o** - 最新版本
+- **Claude 3.5 Sonnet** - Anthropic模型
+- **Gemini Pro** - Google模型
 
 ## 快速配置
 
-### 1. 选择服务商
+### 1. 获取API密钥
 
-在 `.env` 文件中设置：
+1. 访问 [DMXAPI官网](https://www.dmxapi.com)
+2. 注册账号并获取API密钥
+3. 在 `.env` 文件中配置：
 ```bash
-AI_PROVIDER=doubao  # 或 deepseek、openai
+DMXAPI_API_KEY=your_api_key_here
+DMXAPI_MODEL=gpt-5-mini
 ```
 
-### 2. 配置API密钥
+### 2. 可用模型列表
 
-#### 豆包配置
-1. 访问 [火山引擎控制台](https://console.volcengine.com/ark)
-2. 注册账号并实名认证
-3. 创建推理接入点，获取API Key和模型ID
-4. 在 `.env` 文件中配置：
-```bash
-DOUBAO_API_KEY=your_api_key_here
-DOUBAO_MODEL=your_model_id_here
-```
-
-#### DeepSeek配置
-1. 访问 [DeepSeek平台](https://platform.deepseek.com)
-2. 注册账号
-3. 在API Keys页面创建新密钥
-4. 在 `.env` 文件中配置：
-```bash
-DEEPSEEK_API_KEY=your_api_key_here
-DEEPSEEK_MODEL=deepseek-chat
-```
+- `gpt-5-mini` - 默认模型，性能优异
+- `gpt-4o-mini` - GPT-4o Mini模型
+- `gpt-4o` - GPT-4o最新版本
+- `claude-3-5-sonnet-20241022` - Claude 3.5 Sonnet
+- `gemini-pro` - Gemini Pro模型
 
 ## 使用方法
 
@@ -108,9 +99,10 @@ console.log(status);
 
 ## 成本优化
 
-1. **选择合适的服务商**
-   - 豆包：功能全面，中文支持好
-   - DeepSeek：性价比高，适合大量使用
+1. **选择合适的模型**
+   - gpt-5-mini：默认推荐，性价比高
+   - gpt-4o-mini：性能优异，适合复杂任务
+   - claude-3-5-sonnet：适合需要深度分析的场景
 
 2. **控制调用频率**
    - 批量生成时自动添加延迟

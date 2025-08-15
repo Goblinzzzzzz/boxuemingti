@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../services/supabaseClient';
-import { vercelLogger } from '../vercel-logger.js';
+import { vercelLogger } from '../vercel-logger';
 
 const router = Router();
 
@@ -336,11 +336,12 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 获取用户角色
-    requestLogger.info('获取用户角色');
+    // 获取用户角色和权限
+    requestLogger.info('获取用户角色和权限');
     const roleStart = Date.now();
     
     let roles = ['user']; // 默认角色
+    let permissions: string[] = [];
     
     try {
       const { data: userRoles, error: roleError } = await supabase
@@ -368,22 +369,35 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         requestLogger.performance('role_query', roleTime);
         requestLogger.database('select', 'user_roles', roleTime);
       }
+      
+      // 获取用户权限
+      const { data: userPermissions, error: permError } = await supabase
+        .rpc('get_user_permissions', { user_uuid: user.id });
+      
+      if (!permError && userPermissions) {
+        permissions = userPermissions;
+        requestLogger.info(`用户权限获取成功: ${permissions.length} 个权限`);
+      } else {
+        requestLogger.error('获取用户权限失败:', permError?.message);
+      }
     } catch (roleException) {
       const roleTime = Date.now() - roleStart;
-      requestLogger.error(`获取用户角色异常 (${roleTime}ms)`, roleException);
+      requestLogger.error(`获取用户角色权限异常 (${roleTime}ms)`, roleException);
       requestLogger.info('使用默认角色: user');
     }
 
     // 生成JWT token
     requestLogger.info('生成JWT token');
     const tokenStart = Date.now();
+    let generatedTokens: { accessToken: string; refreshToken: string };
     
     try {
       const tokenPayload = {
         userId: user.id,
         email: user.email,
         name: user.name,
-        roles
+        roles,
+        permissions
       };
 
       if (!JWT_SECRET) {
@@ -416,7 +430,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       requestLogger.info(`JWT token 生成成功 (${tokenTime}ms)`);
       
       // 存储生成的token以便后续使用
-      var generatedTokens = { accessToken, refreshToken };
+      generatedTokens = { accessToken, refreshToken };
     } catch (tokenError) {
       const tokenTime = Date.now() - tokenStart;
       requestLogger.error(`JWT token 生成失败 (${tokenTime}ms)`, tokenError);
@@ -480,7 +494,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         email: user.email,
         name: user.name,
         organization: user.organization,
-        roles
+        roles,
+        permissions
       },
       loginId,
       timing: {

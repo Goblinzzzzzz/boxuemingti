@@ -2,9 +2,9 @@
  * 健康检查和数据库连接测试路由
  */
 import express, { type Request, type Response } from 'express';
-import { supabase } from '../services/supabaseClient.js';
-import { vercelLogger } from '../vercel-logger.js';
-import { supabaseValidator } from '../supabase-validator.js';
+import { supabase } from '../services/supabaseClient';
+import { vercelLogger } from '../vercel-logger';
+import { supabaseValidator } from '../supabase-validator';
 // import { debugHandler, healthCheck } from './debug.js';
 
 const router = express.Router();

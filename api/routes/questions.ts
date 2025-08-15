@@ -1,8 +1,10 @@
 import express, { type Request, type Response } from 'express';
-import { supabase } from '../services/supabaseClient.js';
+import { supabase } from '../services/supabaseClient';
+import { authenticateUser, AuthenticatedRequest } from '../middleware/auth';
+import { supabaseServer, successResponse, errorResponse, ApiResponse } from '../utils/supabase-server';
 import { questionReviewService } from '../services/questionReviewService';
-import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization.js';
-import { optimizeMemoryUsage } from '../vercel-compatibility.js';
+import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 const router = express.Router();
 
@@ -12,8 +14,8 @@ if (process.env.VERCEL) {
   logMemoryUsage('试题路由初始化');
 }
 
-// 获取试题列表（支持筛选和分页）
-router.get('/', async (req: Request, res: Response) => {
+// 获取当前用户的试题列表（支持筛选和分页）
+router.get('/', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const queryId = Date.now().toString(36);
   const monitor = new PerformanceMonitor(`试题列表查询-${queryId}`);
   
@@ -39,8 +41,12 @@ router.get('/', async (req: Request, res: Response) => {
       .from('questions')
       .select(`
         *,
-        knowledge_points(id, title, level)
-      `);
+        knowledge_points(id, title, level),
+        generation_tasks!inner(created_by)
+      `)
+      // 只返回当前用户审核通过的试题
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id);
 
     // 应用筛选条件
     if (questionType) {
@@ -60,7 +66,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
     
     if (search) {
-      query = query.ilike('question_text', `%${search}%`);
+      query = query.ilike('stem', `%${search}%`);
     }
 
     // 分页
@@ -75,21 +81,21 @@ router.get('/', async (req: Request, res: Response) => {
       throw error;
     }
 
-    // 获取总数
+    // 获取总数（只统计当前用户已通过审核的试题）
     const { count: totalCount } = await supabase
       .from('questions')
-      .select('*', { count: 'exact', head: true });
+      .select('*, generation_tasks!inner(created_by)', { count: 'exact', head: true })
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id);
 
     res.json({
       success: true,
-      data: {
-        questions: questions || [],
-        pagination: {
-          page: Number(page),
-          limit: Number(limit),
-          total: totalCount || 0,
-          totalPages: Math.ceil((totalCount || 0) / Number(limit))
-        }
+      data: questions || [],
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: totalCount || 0,
+        totalPages: Math.ceil((totalCount || 0) / Number(limit))
       }
     });
   } catch (error) {
@@ -112,8 +118,8 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// 获取试题统计信息
-router.get('/stats', async (req: Request, res: Response) => {
+// 获取当前用户的试题统计信息
+router.get('/stats', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const statsId = Date.now().toString(36);
   const monitor = new PerformanceMonitor(`试题统计-${statsId}`);
   
@@ -125,15 +131,19 @@ router.get('/stats', async (req: Request, res: Response) => {
     if (process.env.VERCEL) {
       optimizeMemoryUsage();
     }
-    // 总试题数
+    // 总试题数（只统计当前用户已通过审核的试题）
     const { count: totalQuestions } = await supabase
       .from('questions')
-      .select('*', { count: 'exact', head: true });
+      .select('*, generation_tasks!inner(created_by)', { count: 'exact', head: true })
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id);
 
-    // 按题型统计
+    // 按题型统计（只统计当前用户已通过审核的试题）
     const { data: typeStats } = await supabase
       .from('questions')
-      .select('question_type')
+      .select('question_type, generation_tasks!inner(created_by)')
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id)
       .then(result => {
         const stats = {};
         result.data?.forEach(item => {
@@ -142,10 +152,12 @@ router.get('/stats', async (req: Request, res: Response) => {
         return { data: stats };
       });
 
-    // 按难度统计
+    // 按难度统计（只统计当前用户已通过审核的试题）
     const { data: difficultyStats } = await supabase
       .from('questions')
-      .select('difficulty')
+      .select('difficulty, generation_tasks!inner(created_by)')
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id)
       .then(result => {
         const stats = {};
         result.data?.forEach(item => {
@@ -154,10 +166,12 @@ router.get('/stats', async (req: Request, res: Response) => {
         return { data: stats };
       });
 
-    // 按知识点分级统计
+    // 按知识点分级统计（只统计当前用户已通过审核的试题）
     const { data: levelStats } = await supabase
       .from('questions')
-      .select('knowledge_level')
+      .select('knowledge_level, generation_tasks!inner(created_by)')
+      .eq('status', 'approved')
+      .eq('generation_tasks.created_by', req.user.id)
       .then(result => {
         const stats = {};
         result.data?.forEach(item => {
@@ -196,7 +210,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 // 获取单个试题详情
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -205,9 +219,10 @@ router.get('/:id', async (req: Request, res: Response) => {
       .select(`
         *,
         knowledge_points(id, title, level),
-        generation_tasks(id, material_id, materials(title))
+        generation_tasks!inner(id, material_id, created_by, materials(title))
       `)
       .eq('id', id)
+      .eq('generation_tasks.created_by', req.user.id)
       .single();
 
     if (error || !question) {
@@ -231,7 +246,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // 更新试题
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const {
@@ -246,7 +261,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     const updateData: any = {};
     
-    if (questionText !== undefined) updateData.question_text = questionText;
+    if (questionText !== undefined) updateData.stem = questionText;
     if (options !== undefined) updateData.options = options;
     if (correctAnswer !== undefined) updateData.correct_answer = correctAnswer;
     if (explanation !== undefined) updateData.explanation = explanation;
@@ -255,6 +270,21 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (knowledgePointId !== undefined) updateData.knowledge_point_id = knowledgePointId;
     
     updateData.updated_at = new Date().toISOString();
+
+    // 首先检查试题是否属于当前用户
+    const { data: existingQuestion } = await supabase
+      .from('questions')
+      .select('id, generation_tasks!inner(created_by)')
+      .eq('id', id)
+      .eq('generation_tasks.created_by', req.user.id)
+      .single();
+
+    if (!existingQuestion) {
+      return res.status(404).json({
+        success: false,
+        error: '试题不存在或无权限访问'
+      });
+    }
 
     const { data: question, error } = await supabase
       .from('questions')
@@ -281,9 +311,24 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // 删除试题
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+
+    // 首先检查试题是否属于当前用户
+    const { data: existingQuestion } = await supabase
+      .from('questions')
+      .select('id, generation_tasks!inner(created_by)')
+      .eq('id', id)
+      .eq('generation_tasks.created_by', req.user.id)
+      .single();
+
+    if (!existingQuestion) {
+      return res.status(404).json({
+        success: false,
+        error: '试题不存在或无权限删除'
+      });
+    }
 
     const { error } = await supabase
       .from('questions')
@@ -308,7 +353,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 // 批量删除试题
-router.delete('/', async (req: Request, res: Response) => {
+router.delete('/batch', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { ids } = req.body;
 
@@ -319,10 +364,26 @@ router.delete('/', async (req: Request, res: Response) => {
       });
     }
 
+    // 首先检查所有试题是否属于当前用户
+    const { data: userQuestions } = await supabase
+      .from('questions')
+      .select('id, generation_tasks!inner(created_by)')
+      .in('id', ids)
+      .eq('generation_tasks.created_by', req.user.id);
+
+    const userQuestionIds = userQuestions?.map(q => q.id) || [];
+    
+    if (userQuestionIds.length !== ids.length) {
+      return res.status(403).json({
+        success: false,
+        error: '部分试题不存在或无权限删除'
+      });
+    }
+
     const { error } = await supabase
       .from('questions')
       .delete()
-      .in('id', ids);
+      .in('id', userQuestionIds);
 
     if (error) {
       throw error;
@@ -342,19 +403,22 @@ router.delete('/', async (req: Request, res: Response) => {
 });
 
 // 导出试题
-router.post('/export', async (req: Request, res: Response) => {
+router.get('/export', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { ids, format = 'json' } = req.body;
+    const { ids, format = 'json' } = req.query;
+    const questionIds = ids ? (Array.isArray(ids) ? ids : String(ids).split(',')) : null;
 
     let query = supabase
       .from('questions')
       .select(`
         *,
-        knowledge_points(title, level)
-      `);
+        knowledge_points(title, level),
+        generation_tasks!inner(created_by)
+      `)
+      .eq('generation_tasks.created_by', req.user.id);
 
-    if (ids && Array.isArray(ids) && ids.length > 0) {
-      query = query.in('id', ids);
+    if (questionIds && questionIds.length > 0) {
+      query = query.in('id', questionIds);
     }
 
     const { data: questions, error } = await query.order('created_at', { ascending: false });
@@ -415,7 +479,7 @@ router.get('/knowledge-points/list', async (req: Request, res: Response) => {
 });
 
 // 质量评分
-router.post('/:id/score', async (req: Request, res: Response) => {
+router.post('/:id/score', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { score, feedback } = req.body;
@@ -424,6 +488,21 @@ router.post('/:id/score', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: '评分必须在0-100之间'
+      });
+    }
+
+    // 首先检查试题是否属于当前用户
+    const { data: existingQuestion } = await supabase
+      .from('questions')
+      .select('id, generation_tasks!inner(created_by)')
+      .eq('id', id)
+      .eq('generation_tasks.created_by', req.user.id)
+      .single();
+
+    if (!existingQuestion) {
+      return res.status(404).json({
+        success: false,
+        error: '试题不存在或无权限评分'
       });
     }
 
@@ -456,7 +535,7 @@ router.post('/:id/score', async (req: Request, res: Response) => {
 });
 
 // 创建单个试题
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const {
       questionType,
@@ -479,12 +558,13 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // 获取一个默认的task_id（如果没有提供的话）
+    // 获取当前用户的task_id（如果没有提供的话）
     let taskId = req.body.taskId;
     if (!taskId) {
       const { data: tasks } = await supabase
         .from('generation_tasks')
         .select('id')
+        .eq('created_by', req.user.id)
         .limit(1);
       taskId = tasks?.[0]?.id;
     }
@@ -526,7 +606,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // 批量保存试题
-router.post('/batch', async (req: Request, res: Response) => {
+router.post('/batch', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     console.log('=== 批量保存试题接口调用 ===');
     console.log('请求体:', JSON.stringify(req.body, null, 2));
@@ -571,12 +651,13 @@ router.post('/batch', async (req: Request, res: Response) => {
         console.log(`第${index + 1}道试题options从对象转换为数组:`, options);
       }
 
-      // 获取一个默认的task_id
+      // 获取当前用户的task_id
       let taskId = q.task_id || q.generation_task_id;
       if (!taskId) {
-        // 如果没有task_id，使用一个默认值或null
-        taskId = null;
-        console.log(`第${index + 1}道试题没有task_id，设置为null`);
+        // 如果没有task_id，需要创建一个默认的生成任务
+        console.log(`第${index + 1}道试题没有task_id，需要创建默认任务`);
+        // 这里可以创建一个默认的生成任务或使用现有的
+        taskId = null; // 暂时设为null，实际应用中可能需要创建默认任务
       }
 
       const insertItem = {

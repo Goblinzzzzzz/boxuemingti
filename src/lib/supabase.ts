@@ -29,6 +29,13 @@ export interface Question {
     conclusion: string
   }
   knowledge_point_id: string
+  status: 'pending' | 'approved' | 'rejected' | 'ai_reviewing' | 'ai_approved' | 'ai_rejected'
+  task_id?: string
+  knowledge_level?: 'HR掌握' | '全员掌握' | '全员熟悉' | '全员了解'
+  quality_score?: number
+  metadata?: any
+  feedback?: string
+  created_by?: string
   created_at: string
   updated_at: string
 }

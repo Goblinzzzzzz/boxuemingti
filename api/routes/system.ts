@@ -1,11 +1,11 @@
 import express from 'express';
-import { authenticateToken, requireRole } from '../middleware/auth';
+import { authenticateUser, requireAdmin, type AuthenticatedRequest } from '../middleware/auth';
 import { supabase } from '../services/supabaseClient';
 
 const router = express.Router();
 
 // 获取系统配置
-router.get('/config', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/config', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { data: config, error } = await supabase
       .from('system_config')
@@ -40,7 +40,7 @@ router.get('/config', authenticateToken, requireRole(['admin']), async (req, res
 });
 
 // 更新系统配置
-router.put('/config', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.put('/config', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const configData = req.body;
     
@@ -84,7 +84,7 @@ router.put('/config', authenticateToken, requireRole(['admin']), async (req, res
 });
 
 // 获取系统日志
-router.get('/logs', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/logs', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { page = 1, limit = 50, level, action } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
@@ -121,7 +121,7 @@ router.get('/logs', authenticateToken, requireRole(['admin']), async (req, res) 
 });
 
 // 导出系统日志
-router.get('/logs/export', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/logs/export', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { data: logs, error } = await supabase
       .from('system_logs')
@@ -151,7 +151,7 @@ router.get('/logs/export', authenticateToken, requireRole(['admin']), async (req
 });
 
 // 清空系统日志
-router.delete('/logs', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.delete('/logs', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { error } = await supabase
       .from('system_logs')
@@ -169,7 +169,7 @@ router.delete('/logs', authenticateToken, requireRole(['admin']), async (req, re
       .insert({
         level: 'info',
         action: '清空系统日志',
-        user_id: req.user?.userId,
+        user_id: req.user?.id,
         ip_address: req.ip,
         details: '管理员清空了所有系统日志',
         created_at: new Date().toISOString()

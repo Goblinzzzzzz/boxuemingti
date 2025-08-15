@@ -115,6 +115,7 @@ import systemRoutes from './routes/system';
 import healthRoutes from './routes/health';
 import logsRoutes from './routes/logs';
 import debugRoutes from './routes/debug';
+import aiRoutes from './routes/ai';
 import { addRequestLog } from './routes/logs';
 import compatibilityRoutes from './routes/compatibility';
 import deploymentRoutes from './routes/deployment';
@@ -195,6 +196,7 @@ app.use('/api/system', systemRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/debug', debugRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/compatibility', compatibilityRoutes);
 app.use('/api/deployment', deploymentRoutes);
 

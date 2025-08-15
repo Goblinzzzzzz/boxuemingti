@@ -56,16 +56,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 数据库连接测试
     requestLogger.info('测试数据库连接');
-    const dbTestStart = Date.now();
+    let dbTestTime = 0;
     
     try {
+      const dbTestStart = Date.now();
       // 先进行简单的连接测试
       const { data: testData, error: testError } = await supabase
         .from('users')
         .select('count')
         .limit(1);
       
-      const dbTestTime = Date.now() - dbTestStart;
+      dbTestTime = Date.now() - dbTestStart;
       
       if (testError) {
         requestLogger.error(`数据库连接测试失败 (${dbTestTime}ms)`, {
@@ -93,7 +94,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requestLogger.performance('db_connection_test', dbTestTime);
       requestLogger.database('connection_test', 'users', dbTestTime);
     } catch (dbError) {
-      const dbTestTime = Date.now() - dbTestStart;
       requestLogger.error(`数据库连接异常 (${dbTestTime}ms)`, dbError);
       vercelLogger.auth('login_failed', undefined, false, { reason: 'db_connection_failed', error: dbError });
       
@@ -256,7 +256,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       loginId,
       timing: {
         totalTime: `${totalTime}ms`,
-        dbTestTime: `${Date.now() - dbTestStart}ms`,
+        dbTestTime: `${dbTestTime}ms`,
         userQueryTime: `${userQueryTime}ms`,
         passwordVerifyTime: `${passwordVerifyTime}ms`,
         tokenGenerateTime: `${tokenGenerateTime}ms`,

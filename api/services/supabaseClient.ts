@@ -5,7 +5,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { getCachedSupabase, logMemoryUsage, enhancedErrorHandler } from '../vercel-optimization.js';
+import { getCachedSupabase, logMemoryUsage, enhancedErrorHandler } from '../vercel-optimization';
 
 // 加载环境变量
 dotenv.config();

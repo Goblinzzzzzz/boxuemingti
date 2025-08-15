@@ -15,8 +15,17 @@ export const envCheckHandler = async (req: Request, res: Response) => {
       'SUPABASE_ANON_KEY',
       'SUPABASE_SERVICE_ROLE_KEY',
       'JWT_SECRET',
+      // AI服务相关环境变量
+      'AI_PROVIDER',
+      'DMXAPI_API_KEY',
+      'DMXAPI_MODEL',
+      'DOUBAO_API_KEY',
+      'DOUBAO_MODEL',
+      'DEEPSEEK_API_KEY',
+      'DEEPSEEK_MODEL',
       'OPENAI_API_KEY',
-      'ANTHROPIC_API_KEY',
+      'OPENAI_MODEL',
+      // Vercel相关
       'VERCEL',
       'VERCEL_URL',
       'VERCEL_ENV'
@@ -78,6 +87,27 @@ export const envCheckHandler = async (req: Request, res: Response) => {
       if (varName === 'JWT_SECRET' && value && value.length < 32) {
         envStatus.summary.issues.push(`${varName} should be at least 32 characters long`);
       }
+      
+      // AI服务特殊检查
+      if (varName === 'AI_PROVIDER' && value && !['dmxapi', 'doubao', 'deepseek', 'openai'].includes(value)) {
+        envStatus.summary.issues.push(`${varName} should be one of: dmxapi, doubao, deepseek, openai`);
+      }
+      
+      if (varName === 'DMXAPI_API_KEY' && value && !value.startsWith('sk-')) {
+        envStatus.summary.issues.push(`${varName} should start with sk-`);
+      }
+      
+      if (varName === 'DOUBAO_API_KEY' && value && value.length < 20) {
+        envStatus.summary.issues.push(`${varName} appears to be too short`);
+      }
+      
+      if (varName === 'DEEPSEEK_API_KEY' && value && !value.startsWith('sk-')) {
+        envStatus.summary.issues.push(`${varName} should start with sk-`);
+      }
+      
+      if (varName === 'OPENAI_API_KEY' && value && !value.startsWith('sk-')) {
+        envStatus.summary.issues.push(`${varName} should start with sk-`);
+      }
     });
 
     // 额外的环境信息
@@ -96,6 +126,22 @@ export const envCheckHandler = async (req: Request, res: Response) => {
       uptime: process.uptime()
     };
 
+    // AI服务配置完整性检查
+    const aiProvider = process.env.AI_PROVIDER;
+    const providerKeyMap: { [key: string]: string } = {
+      'dmxapi': 'DMXAPI_API_KEY',
+      'doubao': 'DOUBAO_API_KEY',
+      'deepseek': 'DEEPSEEK_API_KEY',
+      'openai': 'OPENAI_API_KEY'
+    };
+    
+    if (aiProvider) {
+      const requiredKey = providerKeyMap[aiProvider];
+      if (requiredKey && !process.env[requiredKey]) {
+        envStatus.summary.issues.push(`AI_PROVIDER is set to '${aiProvider}' but ${requiredKey} is missing`);
+      }
+    }
+    
     // 健康状态评估
     const healthScore = (envStatus.summary.defined / envStatus.summary.total) * 100;
     envStatus.health = {
@@ -103,7 +149,18 @@ export const envCheckHandler = async (req: Request, res: Response) => {
       status: healthScore === 100 ? 'healthy' : healthScore >= 80 ? 'warning' : 'critical',
       message: healthScore === 100 
         ? 'All environment variables are properly configured'
-        : `${envStatus.summary.undefined} environment variables are missing or empty`
+        : `${envStatus.summary.undefined} environment variables are missing or empty`,
+      aiServiceStatus: aiProvider ? {
+        provider: aiProvider,
+        configured: !!process.env[providerKeyMap[aiProvider] || ''],
+        message: process.env[providerKeyMap[aiProvider] || ''] 
+          ? `AI service (${aiProvider}) is properly configured`
+          : `AI service (${aiProvider}) is missing API key`
+      } : {
+        provider: 'none',
+        configured: false,
+        message: 'No AI provider configured'
+      }
     };
 
     console.log(`[ENV-CHECK] Health Score: ${envStatus.health.score}%, Status: ${envStatus.health.status}`);

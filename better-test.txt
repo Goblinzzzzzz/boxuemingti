@@ -1,0 +1,10 @@
+这是一个测试文档
+
+内容包括：
+1. 中文文本测试
+2. 英文文本测试 - English text test
+3. 数字和符号：123456 !@#$%^&*()
+4. 多行文本测试
+
+这个文档用于验证文本解析功能是否正常工作。
+This document is used to verify that text parsing functionality works correctly.

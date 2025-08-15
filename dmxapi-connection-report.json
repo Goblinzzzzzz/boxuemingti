@@ -1,0 +1,64 @@
+{
+  "timestamp": "2025-08-14T08:08:21.847Z",
+  "apiKey": "sk-mKzAgjM...",
+  "baseUrl": "https://www.dmxapi.cn/v1",
+  "totalModels": 4,
+  "successCount": 0,
+  "failCount": 4,
+  "results": [
+    {
+      "model": "gpt-5-mini",
+      "status": "failed",
+      "error": "AxiosError: timeout of 30000ms exceeded",
+      "responseTime": 0
+    },
+    {
+      "model": "gpt-4.1-mini",
+      "status": "failed",
+      "error": "AxiosError: timeout of 30000ms exceeded",
+      "responseTime": 0
+    },
+    {
+      "model": "claude-3-sonnet",
+      "status": "failed",
+      "error": "HTTP 503: {\"error\":{\"message\":\"所有令牌分组 default,vip 下对于模型 claude-3-sonnet 均无可用渠道，请更换分组尝试 (request id: 20250814160744752037377X7UOTlvr)\",\"type\":\"rix_api_error\"}}",
+      "responseTime": 0
+    },
+    {
+      "model": "gemini-2.5-pro",
+      "status": "failed",
+      "error": "AI响应内容为空",
+      "responseTime": 13593,
+      "rawResponse": {
+        "id": "chatcmpl-20250814160745807851256qByGqiZJ",
+        "object": "chat.completion",
+        "created": 1755158879,
+        "model": "gemini-2.5-pro",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "reasoning_content": "Okay, let's break this down. The user, likely a client or someone I'm interacting with, is giving me a very specific task. My initial reaction, as someone deeply embedded in natural language processing and computational linguistics, is to dissect the request.\n\nFirst, I immediately recognize the constraints. The user, in their wisdom and understanding of the system, is explicitly asking for *precisely* one thing: \"测试成功\" (tè shì chéng gōng - test successful). My mental checklist begins to tick off items:\n\n1. **Extraction:** The core of the request is not complex. It is a direct instruction. There is no abstraction involved.\n2. **Translation:** The phrase is already in the language of communication. No translation is required or desired.\n3. **Context:** The context, as I read the prompt, is not provided, nor is it implied. I infer that the user likely wishes to verify my function correctly receives, and executes the specified command, with the expected result.\n\nTherefore, my goal is to produce, literally, *only* the provided phrase. I must suppress any impulse to embellish, interpret, or add any additional information. This demands unwavering adherence to the provided instruction. The system must *strictly* follow the command and produce the required output. Let's do this.\n"
+            },
+            "logprobs": null,
+            "finish_reason": "length"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 49,
+          "total_tokens": 64,
+          "prompt_tokens_details": {
+            "text_tokens": 15,
+            "cached_tokens_details": {}
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 49
+          }
+        }
+      }
+    }
+  ]
+}

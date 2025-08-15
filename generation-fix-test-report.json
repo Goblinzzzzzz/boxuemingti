@@ -1,0 +1,29 @@
+{
+  "timestamp": "2025-08-14T07:43:38.082Z",
+  "summary": {
+    "total": 3,
+    "successful": 0,
+    "failed": 3,
+    "successRate": 0
+  },
+  "results": [
+    {
+      "testName": "GPT-5-Mini 生成5道单选题",
+      "success": false,
+      "error": "任务超时",
+      "duration": 120000
+    },
+    {
+      "testName": "Claude Opus 生成3道多选题",
+      "success": false,
+      "error": "任务超时",
+      "duration": 120000
+    },
+    {
+      "testName": "Gemini 2.5 Pro 生成4道判断题",
+      "success": false,
+      "error": "任务超时",
+      "duration": 120000
+    }
+  ]
+}

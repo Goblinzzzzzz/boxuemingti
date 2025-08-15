@@ -1,0 +1,34 @@
+{
+  "timestamp": "2025-08-13T05:33:53.964Z",
+  "summary": {
+    "local": "❌ 异常",
+    "production": "❌ 异常"
+  },
+  "details": {
+    "local": {
+      "success": false,
+      "error": {
+        "message": "Environment check failed",
+        "details": "providerKeyMap is not defined",
+        "stack": "ReferenceError: providerKeyMap is not defined\n    at envCheckHandler (/Users/goblin/trae/mingti/api/routes/env-check.ts:155:35)\n    at Layer.handle [as handle_request] (/Users/goblin/trae/mingti/node_modules/express/lib/router/layer.js:95:5)\n    at next (/Users/goblin/trae/mingti/node_modules/express/lib/router/route.js:149:13)\n    at Route.dispatch (/Users/goblin/trae/mingti/node_modules/express/lib/router/route.js:119:3)\n    at Layer.handle [as handle_request] (/Users/goblin/trae/mingti/node_modules/express/lib/router/layer.js:95:5)\n    at /Users/goblin/trae/mingti/node_modules/express/lib/router/index.js:284:15\n    at Function.process_params (/Users/goblin/trae/mingti/node_modules/express/lib/router/index.js:346:12)\n    at next (/Users/goblin/trae/mingti/node_modules/express/lib/router/index.js:280:10)\n    at <anonymous> (/Users/goblin/trae/mingti/api/app.ts:182:3)\n    at Layer.handle [as handle_request] (/Users/goblin/trae/mingti/node_modules/express/lib/router/layer.js:95:5)"
+      },
+      "statusCode": 500,
+      "url": "http://localhost:3003/api/env-check"
+    },
+    "production": {
+      "success": false,
+      "error": {
+        "code": "404",
+        "message": "The deployment could not be found on Vercel."
+      },
+      "statusCode": 404,
+      "url": "https://mingti.vercel.app/api/env-check"
+    }
+  },
+  "recommendations": [
+    "本地环境配置有问题，请检查.env文件和后端服务",
+    "生产环境配置有问题，请检查Vercel环境变量设置",
+    "运行 node scripts/setup-vercel-env.js 获取配置命令",
+    "确保已重新部署到Vercel"
+  ]
+}

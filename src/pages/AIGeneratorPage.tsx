@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Bot, Brain, Zap, CheckCircle, AlertTriangle, Play, Pause, RotateCcw, Loader2, Wifi, WifiOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import AIModelSelector from '@/components/AIModelSelector'
 
 interface GenerationTask {
   id: string
@@ -108,7 +109,13 @@ export default function AIGeneratorPage() {
 
   const fetchMaterials = async () => {
     try {
-      const response = await fetch('/api/materials')
+      const token = localStorage.getItem('access_token')
+      const response = await fetch('/api/materials', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         setMaterials(data.data || [])
@@ -127,10 +134,13 @@ export default function AIGeneratorPage() {
     try {
       // 添加时间戳参数强制刷新缓存
       const timestamp = Date.now()
+      const token = localStorage.getItem('access_token')
       const response = await fetch(`/api/generation/ai-status?t=${timestamp}`, {
         headers: {
           'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'Pragma': 'no-cache',
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       })
       if (response.ok) {
@@ -190,10 +200,12 @@ export default function AIGeneratorPage() {
     try {
       // 创建生成任务
       console.log('创建生成任务...')
+      const token = localStorage.getItem('access_token')
       const response = await fetch('/api/generation/tasks', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           materialId: selectedMaterial,
@@ -244,7 +256,13 @@ export default function AIGeneratorPage() {
     const pollInterval = setInterval(async () => {
       try {
         console.log(`轮询任务状态: ${taskId}`)
-        const response = await fetch(`/api/generation/tasks/${taskId}/status`)
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`/api/generation/tasks/${taskId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
         console.log(`任务状态响应: ${response.status} ${response.statusText}`)
         if (!response.ok) {
           throw new Error('获取任务状态失败')
@@ -268,7 +286,12 @@ export default function AIGeneratorPage() {
           
           // 获取生成的试题
           console.log(`获取生成的试题: ${taskId}`)
-          const questionsResponse = await fetch(`/api/generation/tasks/${taskId}`)
+          const questionsResponse = await fetch(`/api/generation/tasks/${taskId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
           console.log(`获取试题响应: ${questionsResponse.status} ${questionsResponse.statusText}`)
           if (questionsResponse.ok) {
             const questionsData = await questionsResponse.json()
@@ -451,9 +474,15 @@ export default function AIGeneratorPage() {
       })
 
       // 调用提交审核API
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('未提供认证token')
+      }
+      
       const response = await fetch('/api/questions/batch', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ questions: questionsToSubmit })
@@ -542,6 +571,19 @@ export default function AIGeneratorPage() {
                   )}
                 </div>
               )}
+              
+              {/* AI模型选择器 */}
+              <div className="mt-4">
+                <AIModelSelector 
+                  className="w-full"
+                  onModelChange={(provider, model) => {
+                    console.log('AI模型已切换:', { provider, model });
+                    // 重新检查AI服务状态
+                    checkAIServiceStatus();
+                    toast.success(`已切换到 ${provider} - ${model}`);
+                  }}
+                />
+              </div>
             </div>
             
             <div className="p-6 space-y-6">

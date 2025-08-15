@@ -15,8 +15,18 @@ import {
   UserX,
   MoreVertical,
   Eye,
-  Settings
+  Settings,
+  Clock,
+  Activity,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react';
+import RoleAssignmentModal from '../components/common/RoleAssignmentModal';
+import BatchOperationBar from '../components/common/BatchOperationBar';
+import OperationLog from '../components/common/OperationLog';
+import useRealTimeUpdates from '../hooks/useRealTimeUpdates';
 import { useAuth } from '../stores/authStore';
 import { UserManagementSkeleton } from '@/components/common/SkeletonLoader';
 import { VirtualTable } from '@/components/common/VirtualList';
@@ -29,7 +39,7 @@ interface User {
   roles: string[];
   permissions: string[];
   created_at: string;
-  last_login?: string;
+  last_login_at?: string;
   status: 'active' | 'inactive' | 'suspended';
 }
 
@@ -53,6 +63,25 @@ const UserManagementPage: React.FC = () => {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [showBatchOperations, setShowBatchOperations] = useState(false);
+  const [showOperationLog, setShowOperationLog] = useState(false);
+  
+  // 使用实时更新钩子
+   const { subscribe, forceRefresh } = useRealTimeUpdates({
+     enabled: true,
+     onUserUpdate: (updatedUser) => {
+       setUsers(prev => prev.map(user => 
+         user.id === updatedUser.id ? { ...user, ...updatedUser } : user
+       ));
+     },
+     onUserCreated: (newUser) => {
+       setUsers(prev => [...prev, newUser]);
+     },
+     onUserDeleted: (userId) => {
+       setUsers(prev => prev.filter(user => user.id !== userId));
+     }
+   });
 
   // 模拟数据
   const mockUsers: User[] = [
@@ -64,7 +93,7 @@ const UserManagementPage: React.FC = () => {
       roles: ['admin', 'user'],
       permissions: ['materials.create', 'questions.generate', 'users.manage', 'system.manage'],
       created_at: '2024-01-15T08:00:00Z',
-      last_login: '2024-01-20T10:30:00Z',
+      last_login_at: '2024-01-20T10:30:00Z',
       status: 'active'
     },
     {
@@ -75,7 +104,7 @@ const UserManagementPage: React.FC = () => {
       roles: ['reviewer', 'user'],
       permissions: ['questions.review', 'questions.view'],
       created_at: '2024-01-16T09:00:00Z',
-      last_login: '2024-01-19T14:20:00Z',
+      last_login_at: '2024-01-19T14:20:00Z',
       status: 'active'
     },
     {
@@ -86,7 +115,7 @@ const UserManagementPage: React.FC = () => {
       roles: ['user'],
       permissions: ['questions.view'],
       created_at: '2024-01-17T10:00:00Z',
-      last_login: '2024-01-18T16:45:00Z',
+      last_login_at: '2024-01-18T16:45:00Z',
       status: 'active'
     }
   ];
@@ -179,7 +208,7 @@ const UserManagementPage: React.FC = () => {
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = selectedRole === 'all' || user.roles.includes(selectedRole);
+    const matchesRole = selectedRole === 'all' || (user.roles || []).includes(selectedRole);
     return matchesSearch && matchesRole;
   });
 
@@ -294,34 +323,35 @@ const UserManagementPage: React.FC = () => {
     }
   };
 
-  const handleAssignRole = async (userId: string, roleId: string) => {
+  const handleAssignRole = async (userId: string, roleIds: string[]) => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`/api/users/admin/${userId}/role`, {
+      const response = await fetch(`/api/users/admin/${userId}/roles`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ roleId })
+        body: JSON.stringify({ roleIds })
       });
       
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
           // 更新本地用户角色信息
-          const selectedRole = roles.find(role => role.id === roleId);
+          const selectedRoles = roles.filter(role => roleIds.includes(role.id));
           setUsers(users.map(user => 
             user.id === userId 
-              ? { ...user, roles: selectedRole ? [selectedRole.name] : user.roles }
+              ? { ...user, roles: selectedRoles.map(role => role.name) }
               : user
           ));
-          alert('角色分配成功');
-          setShowRoleModal(false);
+          console.log('角色分配成功');
         } else {
+          console.error('角色分配失败:', data.message);
           alert('角色分配失败: ' + data.message);
         }
       } else {
+        console.error('角色分配失败: 服务器错误');
         alert('角色分配失败: 服务器错误');
       }
     } catch (error) {
@@ -411,13 +441,22 @@ const UserManagementPage: React.FC = () => {
           </h1>
           <p className="text-gray-600 mt-1">管理系统用户、角色和权限</p>
         </div>
-        <button 
-          onClick={() => setShowAddUserModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          添加用户
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowOperationLog(true)}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+          >
+            <Clock className="h-4 w-4" />
+            操作日志
+          </button>
+          <button 
+            onClick={() => setShowAddUserModal(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            添加用户
+          </button>
+        </div>
       </div>
 
       {/* 搜索和筛选 */}
@@ -449,6 +488,36 @@ const UserManagementPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 批量操作栏 */}
+       <BatchOperationBar
+         selectedUsers={selectedUsers}
+         allUsers={users}
+         roles={roles}
+         onSelectAll={(selected) => {
+           if (selected) {
+             setSelectedUsers(paginatedUsers.map(u => u.id));
+           } else {
+             setSelectedUsers([]);
+           }
+         }}
+         onClearSelection={() => setSelectedUsers([])}
+         onBatchStatusChange={async (userIds, status) => {
+           for (const userId of userIds) {
+             await handleToggleUserStatus(userId, status === 'active' ? 'inactive' : 'active');
+           }
+         }}
+         onBatchRoleAssign={async (userIds, roleIds) => {
+           for (const userId of userIds) {
+             await handleAssignRole(userId, roleIds);
+           }
+         }}
+         onBatchDelete={async (userIds) => {
+           for (const userId of userIds) {
+             await handleDeleteUser(userId);
+           }
+         }}
+       />
+
       {/* 用户列表 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         {/* 使用虚拟滚动表格优化性能 */}
@@ -457,6 +526,27 @@ const UserManagementPage: React.FC = () => {
           itemHeight={72}
           containerHeight={600}
           columns={[
+            {
+               key: 'select',
+               title: '选择',
+               width: '5%',
+               render: (user) => (
+                 <div className="flex items-center">
+                   <input
+                     type="checkbox"
+                     checked={selectedUsers.includes(user.id)}
+                     onChange={(e) => {
+                       if (e.target.checked) {
+                         setSelectedUsers([...selectedUsers, user.id]);
+                       } else {
+                         setSelectedUsers(selectedUsers.filter(id => id !== user.id));
+                       }
+                     }}
+                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                   />
+                 </div>
+               )
+             },
             {
               key: 'userInfo',
               title: '用户信息',
@@ -484,7 +574,7 @@ const UserManagementPage: React.FC = () => {
               width: '15%',
               render: (user) => (
                 <div className="flex flex-wrap gap-1">
-                  {user.roles.map((role, index) => (
+                  {(user.roles || []).map((role, index) => (
                     <span
                       key={index}
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -513,7 +603,7 @@ const UserManagementPage: React.FC = () => {
               key: 'lastLogin',
               title: '最后登录',
               width: '15%',
-              render: (user) => user.last_login ? formatDate(user.last_login) : '从未登录'
+              render: (user) => user.last_login_at ? formatDate(user.last_login_at) : '从未登录'
             },
             {
               key: 'createdAt',
@@ -534,6 +624,7 @@ const UserManagementPage: React.FC = () => {
                   >
                     <Edit className="h-4 w-4" />
                   </button>
+
                   <button
                     onClick={() => handleToggleUserStatus(user.id, user.status)}
                     className={`p-1 rounded ${
@@ -647,7 +738,7 @@ const UserManagementPage: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">管理员</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {users.filter(u => u.roles.includes('admin')).length}
+                {users.filter(u => (u.roles || []).includes('admin')).length}
               </p>
             </div>
           </div>
@@ -751,6 +842,68 @@ const UserManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 角色分配模态框 */}
+       {showRoleModal && selectedUser && (
+         <RoleAssignmentModal
+           isOpen={showRoleModal}
+           user={selectedUser}
+           roles={roles}
+           onAssignRole={async (userId, roleIds) => {
+             await handleAssignRole(userId, roleIds);
+             setShowRoleModal(false);
+             setSelectedUser(null);
+           }}
+           onClose={() => {
+             setShowRoleModal(false);
+             setSelectedUser(null);
+           }}
+         />
+       )}
+
+      {/* 批量操作模态框 */}
+       {showBatchOperations && (
+         <RoleAssignmentModal
+           isOpen={showBatchOperations}
+           users={users.filter(u => selectedUsers.includes(u.id))}
+           roles={roles}
+           onAssignRole={async (userId, roleIds) => {
+             for (const uid of selectedUsers) {
+               await handleAssignRole(uid, roleIds);
+             }
+             setShowBatchOperations(false);
+             setSelectedUsers([]);
+           }}
+           onClose={() => {
+             setShowBatchOperations(false);
+           }}
+           isBatch={true}
+         />
+       )}
+
+      {/* 操作日志模态框 */}
+       {showOperationLog && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+           <div className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
+             <div className="flex items-center justify-between p-4 border-b border-gray-200">
+               <h3 className="text-lg font-semibold text-gray-900">操作日志</h3>
+               <button
+                 onClick={() => setShowOperationLog(false)}
+                 className="text-gray-400 hover:text-gray-600"
+               >
+                 <X className="h-6 w-6" />
+               </button>
+             </div>
+             <div className="p-4">
+               <OperationLog
+                 maxHeight="60vh"
+                 showFilters={true}
+                 autoRefresh={true}
+               />
+             </div>
+           </div>
+         </div>
+       )}
 
       {/* 添加用户模态框 */}
       {showAddUserModal && (

@@ -1,6 +1,10 @@
 import { Router, type Request, type Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
-import { questionReviewService } from '../services/questionReviewService.ts';
+import { supabase } from '../services/supabaseClient';
+import { authenticateUser, AuthenticatedRequest } from '../middleware/auth';
+import { vercelLogger } from '../vercel-logger';
+import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+import { optimizeMemoryUsage } from '../vercel-compatibility';
+import { questionReviewService } from '../services/questionReviewService';
 
 // 创建 Supabase 客户端
 const supabase = createClient(

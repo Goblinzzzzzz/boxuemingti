@@ -45,6 +45,9 @@ const DashboardPage = React.lazy(() => {
 const ProfilePage = React.lazy(() => {
   return performanceMonitor.measureFunction('load-profile-page', () => import('./pages/ProfilePage'))
 })
+const DebugPermissionsPage = React.lazy(() => {
+  return performanceMonitor.measureFunction('load-debug-permissions-page', () => import('./pages/DebugPermissionsPage'))
+})
 
 // 页面加载组件
 const PageLoader = ({ text = '页面加载中...' }: { text?: string }) => (
@@ -86,6 +89,7 @@ function App() {
                      <Route path="/" element={<DashboardPage />} />
                      <Route path="/dashboard" element={<DashboardPage />} />
                      <Route path="/profile" element={<ProfilePage />} />
+                     <Route path="/debug-permissions" element={<DebugPermissionsPage />} />
                      <Route path="/home" element={<HomePage />} />
                      <Route path="/material-input" element={
                        <ProtectedRoute config={{ 
@@ -106,7 +110,7 @@ function App() {
                      <Route path="/question-review" element={
                        <ProtectedRoute config={{ 
                          requireAuth: true,
-                         requiredRoles: ['reviewer', 'admin']
+                         requiredPermissions: ['questions.review']
                        }}>
                          <QuestionReviewPage />
                        </ProtectedRoute>
