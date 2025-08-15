@@ -1,10 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
-  return res.status(200).json({
-    success: true,
-    message: 'Vercel function is working',
+  console.log('Test API called:', req.method, req.url);
+  
+  res.status(200).json({
+    message: 'Test API is working',
     method: req.method,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    url: req.url
   });
 }
