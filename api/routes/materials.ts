@@ -8,7 +8,8 @@ import {
   getVercelOptimizationSuggestions,
 } from '../vercel-compatibility';
 import { parseDocumentWithFallback } from '../vercel-compatibility';
-import { PerformanceMonitor, enhancedErrorHandler } from '../vercel-optimization';
+// 移除有问题的vercel-optimization依赖
+// import { PerformanceMonitor, enhancedErrorHandler } from '../vercel-optimization';
 
 // 设置环境变量防止 pdf-parse 进入调试模式
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
@@ -55,11 +56,11 @@ const upload = multer({
 // 上传教材文件
 router.post('/upload', authenticateUser, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
   const uploadId = Date.now().toString(36);
-  const monitor = new PerformanceMonitor(`文件上传-${uploadId}`);
+  // const monitor = new PerformanceMonitor(`文件上传-${uploadId}`);
   
   try {
     console.log(`[UPLOAD-${uploadId}] 开始处理文件上传请求...`);
-    monitor.checkpoint('请求开始');
+    // monitor.checkpoint('请求开始');
     
     // Vercel 环境优化检查
     if (process.env.VERCEL) {
@@ -82,13 +83,13 @@ router.post('/upload', authenticateUser, upload.single('file'), async (req: Auth
     const { title } = req.body;
     
     console.log(`[UPLOAD-${uploadId}] 文件信息: 名称=${originalname}, 类型=${mimetype}, 大小=${buffer.length}字节`);
-    monitor.checkpoint('文件信息获取');
+    // monitor.checkpoint('文件信息获取');
 
     // 文本提取 - 使用降级处理的解析方法
     let content = '';
     try {
       console.log(`[UPLOAD-${uploadId}] 开始文本提取...`);
-      monitor.checkpoint('文本提取开始');
+      // monitor.checkpoint('文本提取开始');
       
       // 内存使用检查
       optimizeMemoryUsage();
@@ -111,13 +112,13 @@ router.post('/upload', authenticateUser, upload.single('file'), async (req: Auth
         content = `无法提取 ${originalname} 的有效内容，请尝试使用文本方式输入`;
       }
       
-      monitor.checkpoint('文本提取完成');
+      // monitor.checkpoint('文本提取完成');
       
       // 内存优化
       optimizeMemoryUsage();
     } catch (extractError) {
       console.error(`[UPLOAD-${uploadId}] 文件内容提取失败:`, extractError);
-      enhancedErrorHandler(extractError, `文件提取-${uploadId}`);
+      console.error(`文件提取错误-${uploadId}:`, extractError);
       
       // 根据错误类型提供更具体的建议
       const errorMessage = extractError instanceof Error ? extractError.message : '未知错误';

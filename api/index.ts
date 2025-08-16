@@ -3,9 +3,9 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import app from './app';
-import { vercelLogger } from './vercel-logger';
+// 移除有问题的vercel-logger依赖
 import { supabaseValidator } from './supabase-validator';
-import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from './vercel-optimization';
+// 移除有问题的vercel-optimization依赖
 
 // 验证关键环境变量
 function validateEnvironment() {
@@ -68,9 +68,9 @@ function validateEnvironment() {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const requestLogger = vercelLogger.createRequestLogger(req);
-  const handlerId = requestLogger.getRequestId();
-  const performanceMonitor = new PerformanceMonitor(handlerId);
+  // const requestLogger = vercelLogger.createRequestLogger(req);
+  const handlerId = Math.random().toString(36).substr(2, 9);
+  // const performanceMonitor = new PerformanceMonitor(handlerId);
   
   // 设置响应头以支持CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -79,21 +79,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   
   // 处理预检请求
   if (req.method === 'OPTIONS') {
-    requestLogger.info('处理OPTIONS预检请求');
+    console.log('处理OPTIONS预检请求');
     res.status(200).end();
     return;
   }
   
   try {
-    requestLogger.info('Vercel 函数开始执行');
+    console.log('Vercel 函数开始执行');
     
     // 记录初始内存使用情况
-    logMemoryUsage('handler_start');
+    // logMemoryUsage('handler_start');
     
     // 验证环境变量
-    requestLogger.info('开始环境变量验证');
+    console.log('开始环境变量验证');
     if (!validateEnvironment()) {
-      requestLogger.error('环境变量验证失败');
+      console.error('环境变量验证失败');
       return res.status(500).json({
         success: false,
         error: 'ENVIRONMENT_ERROR',
@@ -103,15 +103,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         vercelEnv: process.env.VERCEL_ENV || 'unknown'
       });
     }
-    requestLogger.info('环境变量验证通过');
+    console.log('环境变量验证通过');
     
     // 快速连接测试（仅在生产环境）
     if (process.env.VERCEL_ENV === 'production') {
-      requestLogger.info('执行快速连接测试');
+      console.log('执行快速连接测试');
       const connectionTest = await supabaseValidator.quickConnectionTest();
       
       if (!connectionTest.success) {
-        requestLogger.error('Supabase 连接测试失败', connectionTest.details);
+        console.error('Supabase 连接测试失败', connectionTest.details);
         return res.status(503).json({
           success: false,
           error: 'DATABASE_CONNECTION_ERROR',
@@ -122,44 +122,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
-      requestLogger.performance('supabase_connection_test', connectionTest.duration || 0);
-      requestLogger.info('Supabase 连接测试通过');
+      console.log(`Supabase 连接测试通过 (${connectionTest.duration || 0}ms)`);
     }
     
     // 设置请求超时（Vercel函数有10秒限制）
     const TIMEOUT_MS = 8000; // 8秒超时，留2秒缓冲
     const timeout = setTimeout(() => {
-      const duration = performanceMonitor.finish();
-      requestLogger.error(`请求超时 (${duration}ms)`);
+      // // const duration = performanceMonitor.finish();
+      console.error('请求处理超时');
       if (!res.headersSent) {
         res.status(408).json({
           success: false,
           error: 'REQUEST_TIMEOUT',
           message: '请求处理超时',
           handlerId,
-          duration: `${duration}ms`,
+          // duration: `${duration}ms`,
           timeout: `${TIMEOUT_MS}ms`
         });
       }
     }, TIMEOUT_MS);
     
     try {
-      requestLogger.info('将请求传递给Express应用');
+      console.log('将请求传递给Express应用');
       await app(req, res);
     } finally {
       clearTimeout(timeout);
-      const duration = performanceMonitor.finish();
-      requestLogger.performance('total_request_time', duration);
-      requestLogger.info(`请求完成 (${duration}ms)`);
+      console.log('请求完成');
       
       // 记录最终内存使用情况
-      logMemoryUsage('handler_end');
+      // logMemoryUsage('handler_end');
     }
   } catch (error) {
-    const duration = performanceMonitor.finish();
-    const enhancedError = enhancedErrorHandler(error, `vercel_handler_${handlerId}`);
+    // const duration = performanceMonitor.finish();
+      console.error('请求处理异常', {
+        error: error.message || error,
+        handlerId
+      });
     
-    requestLogger.error('Vercel函数处理错误', enhancedError);
+    console.error('Vercel函数处理错误:', error);
     
     if (!res.headersSent) {
       res.status(500).json({
@@ -167,7 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         error: 'VERCEL_FUNCTION_ERROR',
         message: '函数执行错误',
         handlerId,
-        duration: `${duration}ms`,
+        // duration: `${duration}ms`,
         timestamp: new Date().toISOString(),
         vercelEnv: process.env.VERCEL_ENV || 'unknown'
       });

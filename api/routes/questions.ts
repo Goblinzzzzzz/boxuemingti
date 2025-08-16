@@ -3,7 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import { authenticateUser, AuthenticatedRequest } from '../middleware/auth';
 import { supabaseServer, successResponse, errorResponse, ApiResponse } from '../utils/supabase-server';
 import { questionReviewService } from '../services/questionReviewService';
-import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+// 移除有问题的vercel-optimization依赖
 import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 const router = express.Router();
@@ -11,17 +11,17 @@ const router = express.Router();
 // Vercel 环境检测和优化
 if (process.env.VERCEL) {
   console.log('🔍 试题路由 - Vercel 环境检测');
-  logMemoryUsage('试题路由初始化');
+  // logMemoryUsage('试题路由初始化');
 }
 
 // 获取当前用户的试题列表（支持筛选和分页）
 router.get('/', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const queryId = Date.now().toString(36);
-  const monitor = new PerformanceMonitor(`试题列表查询-${queryId}`);
+  // const monitor = new PerformanceMonitor(`试题列表查询-${queryId}`);
   
   try {
     console.log(`[QUESTIONS-${queryId}] 开始获取试题列表...`);
-    monitor.checkpoint('请求开始');
+    // monitor.checkpoint('请求开始');
     
     // Vercel 环境内存优化
     if (process.env.VERCEL) {
@@ -100,7 +100,7 @@ router.get('/', authenticateUser, async (req: AuthenticatedRequest, res: Respons
     });
   } catch (error) {
     console.error(`[QUESTIONS-${queryId}] 获取试题列表失败:`, error);
-    enhancedErrorHandler(error, `试题列表查询-${queryId}`);
+    console.error(`试题列表查询错误-${queryId}:`, error);
     
     if (!res.headersSent) {
       res.status(500).json({
@@ -121,11 +121,11 @@ router.get('/', authenticateUser, async (req: AuthenticatedRequest, res: Respons
 // 获取当前用户的试题统计信息
 router.get('/stats', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const statsId = Date.now().toString(36);
-  const monitor = new PerformanceMonitor(`试题统计-${statsId}`);
+  // const monitor = new PerformanceMonitor(`试题统计-${statsId}`);
   
   try {
     console.log(`[STATS-${statsId}] 开始获取试题统计信息...`);
-    monitor.checkpoint('请求开始');
+    // monitor.checkpoint('请求开始');
     
     // Vercel 环境内存优化
     if (process.env.VERCEL) {
@@ -191,7 +191,7 @@ router.get('/stats', authenticateUser, async (req: AuthenticatedRequest, res: Re
     });
   } catch (error) {
     console.error(`[STATS-${statsId}] 获取统计信息失败:`, error);
-    enhancedErrorHandler(error, `试题统计-${statsId}`);
+    console.error(`试题统计错误-${statsId}:`, error);
     
     if (!res.headersSent) {
       res.status(500).json({

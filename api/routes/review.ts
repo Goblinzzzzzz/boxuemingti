@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { questionReviewService } from '../services/questionReviewService';
 import { authenticateUser, type AuthenticatedRequest } from '../middleware/auth';
 import { aiService } from '../services/aiService';
-import { vercelLogger } from '../vercel-logger';
-import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+// 移除有问题的vercel-logger依赖
+// 移除有问题的vercel-optimization依赖
 import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 // 创建 Supabase 客户端

@@ -57,7 +57,7 @@ router.get('/profile', authenticateUser, async (req: AuthenticatedRequest, res: 
         .eq('user_id', userId);
       
       if (!rolesError && userRoles) {
-        roles = userRoles.map(ur => ur.roles.name);
+        roles = userRoles.map((ur: any) => ur.roles?.name).filter(Boolean);
       }
       
       // 使用数据库函数获取用户权限
@@ -820,7 +820,7 @@ router.get('/admin/roles', authenticateUser, requireAdmin, async (req: Authentic
           };
         }
 
-        const permissions = (rolePermissions || []).map(rp => rp.permissions.name);
+        const permissions = (rolePermissions || []).map((rp: any) => rp.permissions?.name).filter(Boolean);
         return {
           ...role,
           permissions

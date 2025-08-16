@@ -3,7 +3,7 @@
  */
 import express, { type Request, type Response } from 'express';
 import { supabase } from '../services/supabaseClient';
-import { vercelLogger } from '../vercel-logger';
+// 移除有问题的vercel-logger依赖
 import { supabaseValidator } from '../supabase-validator';
 // import { debugHandler, healthCheck } from './debug.js';
 
@@ -14,17 +14,17 @@ const router = express.Router();
  * GET /api/health
  */
 router.get('/', async (req: Request, res: Response) => {
-  const requestLogger = vercelLogger.createRequestLogger(req);
-  const healthCheckId = requestLogger.getRequestId();
+  // const requestLogger = vercelLogger.createRequestLogger(req);
+  const healthCheckId = Date.now().toString(36);
   
   try {
-    requestLogger.info('开始健康检查');
+    console.log('开始健康检查');
     
     // 执行快速连接测试
     const quickTest = await supabaseValidator.quickConnectionTest();
     
     if (!quickTest.success) {
-      requestLogger.error('快速连接测试失败', quickTest.details);
+      console.error('快速连接测试失败', quickTest.details);
       return res.status(503).json({
         success: false,
         status: 'unhealthy',
@@ -35,8 +35,7 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
     
-    requestLogger.performance('quick_connection_test', quickTest.duration || 0);
-    requestLogger.info('快速连接测试通过');
+    console.log(`快速连接测试通过，耗时: ${quickTest.duration || 0}ms`);
     
     // 返回健康状态
     res.json({
@@ -57,7 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
       version: '1.0.0'
     });
   } catch (error) {
-    requestLogger.error('健康检查过程中发生错误', error);
+    console.error('健康检查过程中发生错误', error);
     
     if (!res.headersSent) {
       res.status(500).json({
@@ -77,17 +76,16 @@ router.get('/', async (req: Request, res: Response) => {
  * GET /api/health/db
  */
 router.get('/db', async (req: Request, res: Response) => {
-  const requestLogger = vercelLogger.createRequestLogger(req);
-  const testId = requestLogger.getRequestId();
+  // const requestLogger = vercelLogger.createRequestLogger(req);
+  const testId = Date.now().toString(36);
   
   try {
-    requestLogger.info('开始详细数据库测试');
+    console.log('开始详细数据库测试');
     
     // 执行完整的 Supabase 验证
     const validationReport = await supabaseValidator.validateComplete();
     
-    requestLogger.performance('complete_validation', validationReport.performance.totalTime);
-    requestLogger.info(`详细数据库测试完成: ${validationReport.overall.success ? '通过' : '失败'}`);
+    console.log(`详细数据库测试完成: ${validationReport.overall.success ? '通过' : '失败'}，耗时: ${validationReport.performance.totalTime}ms`);
     
     const statusCode = validationReport.overall.success ? 200 : 503;
     
@@ -100,7 +98,7 @@ router.get('/db', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    requestLogger.error('详细数据库测试过程中发生错误', error);
+    console.error('详细数据库测试过程中发生错误', error);
     
     if (!res.headersSent) {
       res.status(500).json({

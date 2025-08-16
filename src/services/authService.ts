@@ -27,7 +27,7 @@ const API_BASE_URL = (import.meta as any).env.PROD
 // 创建 axios 实例
 const authApi = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000, // 增加到60秒，适应生产环境较慢的响应
   headers: {
     'Content-Type': 'application/json'
   }
@@ -65,7 +65,7 @@ authApi.interceptors.response.use(
         }
         
         console.log('Token刷新中...');
-        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -122,75 +122,103 @@ export class AuthService {
     this.api = authApi;
   }
   /**
-   * 用户登录
+   * 用户登录（带重试机制）
    */
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     return performanceMonitor.measureFunction('auth-login', async () => {
-      try {
-        console.log('开始登录请求:', credentials.email);
-        console.log('API基础URL:', API_BASE_URL);
-        console.log('完整请求URL:', `${API_BASE_URL}/auth/login`);
-        console.log('当前环境:', (import.meta as any).env.MODE);
-        console.log('是否为生产环境:', (import.meta as any).env.PROD);
-        
-        const response: AxiosResponse<AuthResponse> = await this.api.post('/auth/login', credentials);
-        
-        console.log('登录响应状态:', response.status);
-        console.log('登录响应数据:', response.data);
-        
-        if (response.data.success && response.data.access_token) {
-          console.log('登录成功，保存token');
+      const maxRetries = 3;
+      const retryDelay = 1000; // 1秒
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`开始登录请求 (尝试 ${attempt}/${maxRetries}):`, credentials.email);
+          console.log('API基础URL:', API_BASE_URL);
+          console.log('完整请求URL:', `${API_BASE_URL}/login`);
+          console.log('当前环境:', (import.meta as any).env.MODE);
+          console.log('是否为生产环境:', (import.meta as any).env.PROD);
           
-          // 清除相关缓存
-          apiCache.clearCacheByUrl('/api/users');
+          const response: AxiosResponse<AuthResponse> = await this.api.post('/login', credentials);
           
-          // 原子性保存token
-          try {
-            localStorage.setItem('access_token', response.data.access_token);
-            if (response.data.refresh_token) {
-              localStorage.setItem('refresh_token', response.data.refresh_token);
+          console.log('登录响应状态:', response.status);
+          console.log('登录响应数据:', response.data);
+          
+          if (response.data.success && response.data.access_token) {
+            console.log('登录成功，保存token');
+            
+            // 清除相关缓存
+            apiCache.clearCacheByUrl('/api/users');
+            
+            // 原子性保存token
+            try {
+              localStorage.setItem('access_token', response.data.access_token);
+              if (response.data.refresh_token) {
+                localStorage.setItem('refresh_token', response.data.refresh_token);
+              }
+              console.log('Token保存成功');
+            } catch (storageError) {
+              console.error('Token保存失败:', storageError);
+              throw new Error('登录成功但token保存失败');
             }
-            console.log('Token保存成功');
-          } catch (storageError) {
-            console.error('Token保存失败:', storageError);
-            throw new Error('登录成功但token保存失败');
           }
+          
+          return response.data;
+        } catch (error: any) {
+          console.error(`登录请求失败 (尝试 ${attempt}/${maxRetries}) - 详细错误信息:`);
+          console.error('错误对象:', error);
+          console.error('错误消息:', error.message);
+          console.error('错误代码:', error.code);
+          console.error('请求配置:', error.config);
+          
+          if (error.response) {
+            console.error('响应状态:', error.response.status);
+            console.error('响应头:', error.response.headers);
+            console.error('响应数据:', error.response.data);
+          } else if (error.request) {
+            console.error('请求对象:', error.request);
+            console.error('网络错误或服务器无响应');
+          }
+          
+          // 判断是否需要重试
+          const shouldRetry = attempt < maxRetries && (
+            error.code === 'NETWORK_ERROR' || 
+            error.code === 'ERR_NETWORK' ||
+            error.code === 'ECONNABORTED' || // 超时错误
+            error.response?.status >= 500 // 服务器错误
+          );
+          
+          if (shouldRetry) {
+            console.log(`网络错误，${retryDelay}ms后重试...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay * attempt)); // 递增延迟
+            continue;
+          }
+          
+          // 最后一次尝试失败或不可重试的错误
+          let errorMessage = '登录失败，请稍后重试';
+          
+          if (error.code === 'NETWORK_ERROR' || error.code === 'ERR_NETWORK') {
+            errorMessage = '网络连接失败，请检查网络连接';
+          } else if (error.code === 'ECONNABORTED') {
+            errorMessage = '请求超时，请检查网络连接或稍后重试';
+          } else if (error.response?.status === 404) {
+            errorMessage = 'API接口未找到，请联系技术支持';
+          } else if (error.response?.status === 500) {
+            errorMessage = '服务器内部错误，请稍后重试';
+          } else if (error.response?.data?.message) {
+            errorMessage = error.response.data.message;
+          }
+          
+          return {
+            success: false,
+            message: errorMessage
+          };
         }
-        
-        return response.data;
-      } catch (error: any) {
-        console.error('登录请求失败 - 详细错误信息:');
-        console.error('错误对象:', error);
-        console.error('错误消息:', error.message);
-        console.error('错误代码:', error.code);
-        console.error('请求配置:', error.config);
-        
-        if (error.response) {
-          console.error('响应状态:', error.response.status);
-          console.error('响应头:', error.response.headers);
-          console.error('响应数据:', error.response.data);
-        } else if (error.request) {
-          console.error('请求对象:', error.request);
-          console.error('网络错误或服务器无响应');
-        }
-        
-        let errorMessage = '登录失败，请稍后重试';
-        
-        if (error.code === 'NETWORK_ERROR' || error.code === 'ERR_NETWORK') {
-          errorMessage = '网络连接失败，请检查网络连接';
-        } else if (error.response?.status === 404) {
-          errorMessage = 'API接口未找到，请联系技术支持';
-        } else if (error.response?.status === 500) {
-          errorMessage = '服务器内部错误，请稍后重试';
-        } else if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
-        }
-        
-        return {
-          success: false,
-          message: errorMessage
-        };
       }
+      
+      // 理论上不会到达这里
+      return {
+        success: false,
+        message: '登录失败，请稍后重试'
+      };
     });
   }
 
@@ -199,7 +227,7 @@ export class AuthService {
    */
   async register(userData: RegisterRequest): Promise<AuthResponse> {
     try {
-      const response: AxiosResponse<AuthResponse> = await this.api.post('/auth/register', userData);
+      const response: AxiosResponse<AuthResponse> = await this.api.post('/register', userData);
       return response.data;
     } catch (error: any) {
       return {
@@ -214,7 +242,7 @@ export class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      await this.api.post('/auth/logout');
+      await this.api.post('/logout');
     } catch (error) {
       console.error('登出请求失败:', error);
     } finally {
@@ -235,7 +263,7 @@ export class AuthService {
         return false;
       }
 
-      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      const response = await fetch(`${API_BASE_URL}/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

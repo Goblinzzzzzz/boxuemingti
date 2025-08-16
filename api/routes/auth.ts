@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../services/supabaseClient';
-import { vercelLogger } from '../vercel-logger';
+// 移除有问题的vercel-logger依赖
 
 const router = Router();
 
@@ -113,14 +113,14 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const startTime = Date.now();
-  const requestLogger = vercelLogger.createRequestLogger(req);
-  const loginId = requestLogger.getRequestId();
+  // const requestLogger = vercelLogger.createRequestLogger(req);
+  const loginId = Math.random().toString(36).substr(2, 9);
   
   try {
-    requestLogger.info('登录请求开始');
-    vercelLogger.auth('login_attempt', undefined, false, { email: req.body.email });
+    console.log('登录请求开始');
+    console.log('login_attempt:', { email: req.body.email });
     
-    requestLogger.info('环境检查', {
+    console.log('环境检查', {
       nodeEnv: process.env.NODE_ENV,
       jwtSecret: process.env.JWT_SECRET ? '已设置' : '未设置',
       supabaseUrl: process.env.SUPABASE_URL ? '已设置' : '未设置',
@@ -132,8 +132,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
     // 验证必填字段
     if (!email || !password) {
-      requestLogger.warn('登录失败: 缺少必填字段');
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'missing_credentials' });
+      console.warn('登录失败: 缺少必填字段');
+      console.log('login_failed:', { reason: 'missing_credentials' });
       res.status(400).json({
         success: false,
         message: '邮箱和密码为必填字段',
@@ -142,10 +142,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    requestLogger.info(`尝试登录用户: ${email}`);
+    console.log(`尝试登录用户: ${email}`);
 
     // 数据库连接测试
-    requestLogger.info('测试数据库连接');
+    console.log('测试数据库连接');
     const dbTestStart = Date.now();
     
     try {
@@ -158,7 +158,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       const dbTestTime = Date.now() - dbTestStart;
       
       if (testError) {
-        requestLogger.error(`数据库连接测试失败 (${dbTestTime}ms)`, {
+        console.error(`数据库连接测试失败 (${dbTestTime}ms)`, {
           error: testError.message,
           code: testError.code,
           details: testError.details,
@@ -181,12 +181,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         return;
       }
       
-      requestLogger.performance('db_connection_test', dbTestTime);
-      requestLogger.database('connection_test', 'users', dbTestTime);
+      console.log(`数据库连接测试成功 (${dbTestTime}ms)`);
     } catch (dbError) {
       const dbTestTime = Date.now() - dbTestStart;
-      requestLogger.error(`数据库连接异常 (${dbTestTime}ms)`, dbError);
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'db_connection_failed', error: dbError });
+      console.error(`数据库连接异常 (${dbTestTime}ms)`, dbError);
+      console.error('login_failed:', { reason: 'db_connection_failed', error: dbError });
       
       res.status(503).json({
         success: false,
@@ -204,7 +203,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 查找用户
-    requestLogger.info('查询用户信息');
+    console.log('查询用户信息');
     const userQueryStart = Date.now();
     
     const { data: user, error: userError } = await supabase
@@ -216,7 +215,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const userQueryTime = Date.now() - userQueryStart;
 
     if (userError) {
-      requestLogger.error(`数据库查询用户失败 (${userQueryTime}ms)`, {
+      console.error(`数据库查询用户失败 (${userQueryTime}ms)`, {
         error: userError.message,
         code: userError.code,
         details: userError.details,
@@ -226,8 +225,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       // 根据错误类型返回不同的响应
       if (userError.code === 'PGRST116') {
         // 用户不存在
-        requestLogger.warn(`用户不存在: ${email}`);
-        vercelLogger.auth('login_failed', undefined, false, { reason: 'user_not_found', email });
+        console.warn(`用户不存在: ${email}`);
+        console.log('login_failed:', { reason: 'user_not_found', email });
         res.status(401).json({
           success: false,
           message: '邮箱或密码错误',
@@ -252,12 +251,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-    requestLogger.performance('user_query', userQueryTime);
-    requestLogger.database('select', 'users', userQueryTime);
+    console.log(`用户查询成功 (${userQueryTime}ms)`);
 
     if (!user) {
-      requestLogger.warn(`用户不存在: ${email}`);
-      vercelLogger.auth('login_failed', undefined, false, { reason: 'user_not_found', email });
+      console.warn(`用户不存在: ${email}`);
+      console.log('login_failed:', { reason: 'user_not_found', email });
       res.status(401).json({
         success: false,
         message: '邮箱或密码错误',
@@ -267,7 +265,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 验证密码
-    requestLogger.info('验证用户密码');
+    console.log('验证用户密码');
     const passwordStart = Date.now();
     
     try {
@@ -275,8 +273,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       const passwordTime = Date.now() - passwordStart;
       
       if (!isPasswordValid) {
-        requestLogger.warn(`密码验证失败: ${email} (${passwordTime}ms)`);
-        vercelLogger.auth('login_failed', user.id, false, { reason: 'invalid_password' });
+        console.warn(`密码验证失败: ${email} (${passwordTime}ms)`);
+        console.log('login_failed:', { reason: 'invalid_password', userId: user.id });
         res.status(401).json({
           success: false,
           message: '邮箱或密码错误',
@@ -285,11 +283,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         return;
       }
       
-      requestLogger.performance('password_verification', passwordTime);
+      console.log(`密码验证成功 (${passwordTime}ms)`);
     } catch (passwordError) {
       const passwordTime = Date.now() - passwordStart;
-      requestLogger.error(`密码验证异常 (${passwordTime}ms)`, passwordError);
-      vercelLogger.auth('login_failed', user.id, false, { reason: 'password_verification_error', error: passwordError });
+      console.error(`密码验证异常 (${passwordTime}ms)`, passwordError);
+      console.error('login_failed:', { reason: 'password_verification_error', error: passwordError, userId: user.id });
       
       res.status(500).json({
         success: false,
@@ -307,7 +305,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 检查用户状态
-    requestLogger.info(`检查用户状态: ${user.status}`);
+    console.log(`检查用户状态: ${user.status}`);
     if (user.status !== 'active') {
       let message = '账户状态异常，无法登录';
       
@@ -325,8 +323,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
           message = '账户状态异常，无法登录';
       }
       
-      requestLogger.warn(`用户状态检查失败: ${user.status} - ${message}`);
-      vercelLogger.auth('login_failed', user.id, false, { reason: 'account_status', status: user.status });
+      console.warn(`用户状态检查失败: ${user.status} - ${message}`);
+      console.log('login_failed:', { reason: 'account_status', status: user.status, userId: user.id });
       res.status(403).json({
         success: false,
         message,
@@ -337,7 +335,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 获取用户角色和权限
-    requestLogger.info('获取用户角色和权限');
+    console.log('获取用户角色和权限');
     const roleStart = Date.now();
     
     let roles = ['user']; // 默认角色
@@ -357,17 +355,15 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       const roleTime = Date.now() - roleStart;
 
       if (roleError) {
-        requestLogger.error(`获取用户角色失败 (${roleTime}ms)`, {
+        console.error(`获取用户角色失败 (${roleTime}ms)`, {
           error: roleError.message,
           code: roleError.code,
           details: roleError.details
         });
-        requestLogger.info('使用默认角色: user');
+        console.log('使用默认角色: user');
       } else {
         roles = userRoles?.map((ur: any) => ur.roles.name) || ['user'];
-        requestLogger.info(`用户角色获取成功 (${roleTime}ms): ${roles.join(', ')}`);
-        requestLogger.performance('role_query', roleTime);
-        requestLogger.database('select', 'user_roles', roleTime);
+        console.log(`用户角色获取成功 (${roleTime}ms): ${roles.join(', ')}`);
       }
       
       // 获取用户权限
@@ -376,18 +372,18 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       
       if (!permError && userPermissions) {
         permissions = userPermissions;
-        requestLogger.info(`用户权限获取成功: ${permissions.length} 个权限`);
+        console.log(`用户权限获取成功: ${permissions.length} 个权限`);
       } else {
-        requestLogger.error('获取用户权限失败:', permError?.message);
+        console.error('获取用户权限失败:', permError?.message);
       }
     } catch (roleException) {
       const roleTime = Date.now() - roleStart;
-      requestLogger.error(`获取用户角色权限异常 (${roleTime}ms)`, roleException);
-      requestLogger.info('使用默认角色: user');
+      console.error(`获取用户角色权限异常 (${roleTime}ms)`, roleException);
+      console.log('使用默认角色: user');
     }
 
     // 生成JWT token
-    requestLogger.info('生成JWT token');
+    console.log('生成JWT token');
     const tokenStart = Date.now();
     let generatedTokens: { accessToken: string; refreshToken: string };
     
@@ -401,8 +397,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       };
 
       if (!JWT_SECRET) {
-        requestLogger.error('JWT_SECRET 环境变量未设置');
-        vercelLogger.auth('login_failed', user.id, false, { reason: 'jwt_config_error' });
+        console.error('JWT_SECRET 环境变量未设置');
+        console.error('login_failed:', { reason: 'jwt_config_error', userId: user.id });
         res.status(500).json({
           success: false,
           message: '服务器配置错误',
@@ -426,15 +422,14 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       );
       
       const tokenTime = Date.now() - tokenStart;
-      requestLogger.performance('jwt_generation', tokenTime);
-      requestLogger.info(`JWT token 生成成功 (${tokenTime}ms)`);
+      console.log(`JWT token 生成成功 (${tokenTime}ms)`);
       
       // 存储生成的token以便后续使用
       generatedTokens = { accessToken, refreshToken };
     } catch (tokenError) {
       const tokenTime = Date.now() - tokenStart;
-      requestLogger.error(`JWT token 生成失败 (${tokenTime}ms)`, tokenError);
-      vercelLogger.auth('login_failed', user.id, false, { reason: 'jwt_generation_error', error: tokenError });
+      console.error(`JWT token 生成失败 (${tokenTime}ms)`, tokenError);
+      console.error('login_failed:', { reason: 'jwt_generation_error', error: tokenError, userId: user.id });
       
       res.status(500).json({
         success: false,
@@ -452,7 +447,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // 更新最后登录时间
-    requestLogger.info('更新最后登录时间');
+    console.log('更新最后登录时间');
     const updateStart = Date.now();
     
     try {
@@ -464,25 +459,23 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       const updateTime = Date.now() - updateStart;
 
       if (updateError) {
-        requestLogger.error(`更新最后登录时间失败 (${updateTime}ms)`, {
+        console.error(`更新最后登录时间失败 (${updateTime}ms)`, {
           error: updateError.message,
           code: updateError.code
         });
         // 继续执行，不影响登录流程
       } else {
-        requestLogger.performance('last_login_update', updateTime);
-        requestLogger.database('update', 'users', updateTime);
+        console.log(`最后登录时间更新成功 (${updateTime}ms)`);
       }
     } catch (updateException) {
       const updateTime = Date.now() - updateStart;
-      requestLogger.error(`更新最后登录时间异常 (${updateTime}ms)`, updateException);
+      console.error(`更新最后登录时间异常 (${updateTime}ms)`, updateException);
       // 继续执行，不影响登录流程
     }
 
     const duration = Date.now() - startTime;
-    requestLogger.performance('total_login', duration);
-    requestLogger.info(`登录成功，总用时: ${duration}ms`);
-    vercelLogger.auth('login_success', user.id, true, { email: user.email, roles });
+    console.log(`登录成功，总用时: ${duration}ms`);
+    console.log('login_success:', { email: user.email, roles, userId: user.id });
 
     res.json({
       success: true,
@@ -505,14 +498,14 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-    requestLogger.error(`登录过程中发生未捕获错误 (用时: ${duration}ms)`, {
+    console.error(`登录过程中发生未捕获错误 (用时: ${duration}ms)`, {
       error: error instanceof Error ? error.message : '未知错误',
       stack: error instanceof Error ? error.stack : 'No stack trace',
       nodeEnv: process.env.NODE_ENV,
       vercelRegion: process.env.VERCEL_REGION || 'local',
       timestamp: new Date().toISOString()
     });
-    vercelLogger.auth('login_failed', undefined, false, { reason: 'uncaught_error', error });
+    console.error('login_failed:', { reason: 'uncaught_error', error });
     
     // 根据错误类型返回不同的状态码
     let statusCode = 500;

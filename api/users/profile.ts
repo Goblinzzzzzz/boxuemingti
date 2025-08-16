@@ -4,21 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
-import { createClient } from '@supabase/supabase-js';
-
-// 直接在文件中初始化Supabase客户端
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// 验证环境变量
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Supabase环境变量缺失:', {
-    hasUrl: !!supabaseUrl,
-    hasServiceKey: !!supabaseServiceKey
-  });
-}
-
-const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
+import { supabase } from '../services/supabaseClient.js';
 
 // JWT配置
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -30,15 +16,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({
       success: false,
       message: 'Method Not Allowed. Only GET requests are supported.'
-    });
-  }
-
-  // 检查环境变量
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('Supabase环境变量未配置');
-    return res.status(500).json({
-      success: false,
-      message: '服务器配置错误'
     });
   }
 

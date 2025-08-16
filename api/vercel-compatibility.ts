@@ -20,7 +20,7 @@ async function initializeDependencies() {
   // 初始化错误日志记录器
   try {
     // 使用动态import代替require
-    const loggerModule = await import('./utils/error-logger.js');
+    const loggerModule = await import('./utils/error-logger');
     errorLogger = loggerModule.errorLogger;
     withPerformanceLogging = loggerModule.withPerformanceLogging;
     console.log('✅ error-logger 模块加载成功');

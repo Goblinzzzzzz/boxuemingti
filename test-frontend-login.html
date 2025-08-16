@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端登录测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="email"], input[type="password"], input[type="url"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .info {
+            color: #17a2b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>前端登录测试工具</h1>
+        <p>此工具用于测试前端登录API调用，模拟实际用户登录过程</p>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="baseUrl">API基础URL:</label>
+                <input type="url" id="baseUrl" value="https://exam.kehr.work" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">邮箱:</label>
+                <input type="email" id="email" value="zhaodan@ke.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">密码:</label>
+                <input type="password" id="password" value="123456" required>
+            </div>
+            
+            <button type="submit">测试登录</button>
+            <button type="button" onclick="clearLog()">清空日志</button>
+        </form>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('log');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            
+            const span = document.createElement('span');
+            span.className = type;
+            span.textContent = logEntry;
+            logElement.appendChild(span);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        function clearLog() {
+            logElement.innerHTML = '';
+        }
+        
+        async function testLogin(baseUrl, email, password) {
+            log('🚀 开始前端登录测试...', 'info');
+            log(`📍 测试环境: ${baseUrl}`, 'info');
+            log(`👤 测试账号: ${email}`, 'info');
+            
+            try {
+                // 1. 测试基础连接
+                log('\n1️⃣ 测试基础连接...', 'info');
+                const pingResponse = await fetch(`${baseUrl}/api/login`, {
+                    method: 'OPTIONS'
+                });
+                log(`   连接状态: ${pingResponse.status}`, pingResponse.ok ? 'success' : 'error');
+                
+                // 2. 执行登录请求
+                log('\n2️⃣ 执行登录请求...', 'info');
+                const loginUrl = `${baseUrl}/api/login`;
+                log(`   请求URL: ${loginUrl}`, 'info');
+                
+                const loginData = {
+                    email: email,
+                    password: password
+                };
+                log(`   请求数据: ${JSON.stringify(loginData, null, 2)}`, 'info');
+                
+                const loginResponse = await fetch(loginUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(loginData)
+                });
+                
+                log(`   响应状态: ${loginResponse.status} ${loginResponse.statusText}`, 
+                    loginResponse.ok ? 'success' : 'error');
+                
+                // 获取响应头信息
+                const responseHeaders = {};
+                for (let [key, value] of loginResponse.headers.entries()) {
+                    responseHeaders[key] = value;
+                }
+                log(`   响应头: ${JSON.stringify(responseHeaders, null, 2)}`, 'info');
+                
+                const responseText = await loginResponse.text();
+                log(`   响应内容: ${responseText}`, 'info');
+                
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch (e) {
+                    log(`   ❌ 响应不是有效的JSON格式`, 'error');
+                    return;
+                }
+                
+                if (loginResponse.ok && responseData.success) {
+                    log('\n✅ 登录成功!', 'success');
+                    
+                    const { access_token, refresh_token, user } = responseData.data || {};
+                    log(`   访问令牌: ${access_token ? access_token.substring(0, 50) + '...' : '无'}`, 'success');
+                    log(`   刷新令牌: ${refresh_token ? refresh_token.substring(0, 50) + '...' : '无'}`, 'success');
+                    log(`   用户信息: ${user ? JSON.stringify(user, null, 2) : '无'}`, 'success');
+                    
+                    // 3. 测试用户信息获取
+                    if (access_token) {
+                        log('\n3️⃣ 测试用户信息获取...', 'info');
+                        const profileUrl = `${baseUrl}/api/users/profile`;
+                        
+                        const profileResponse = await fetch(profileUrl, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${access_token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        log(`   用户信息请求状态: ${profileResponse.status}`, 
+                            profileResponse.ok ? 'success' : 'error');
+                        
+                        const profileText = await profileResponse.text();
+                        log(`   用户信息响应: ${profileText}`, 'info');
+                        
+                        if (profileResponse.ok) {
+                            log('✅ 用户信息获取成功!', 'success');
+                        } else {
+                            log('❌ 用户信息获取失败', 'error');
+                        }
+                    }
+                    
+                    // 4. 测试令牌刷新
+                    if (refresh_token) {
+                        log('\n4️⃣ 测试令牌刷新...', 'info');
+                        const refreshUrl = `${baseUrl}/api/refresh`;
+                        
+                        const refreshResponse = await fetch(refreshUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ refresh_token })
+                        });
+                        
+                        log(`   令牌刷新状态: ${refreshResponse.status}`, 
+                            refreshResponse.ok ? 'success' : 'error');
+                        
+                        const refreshText = await refreshResponse.text();
+                        log(`   令牌刷新响应: ${refreshText}`, 'info');
+                    }
+                    
+                } else {
+                    log(`\n❌ 登录失败: ${responseData.message || '未知错误'}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`\n💥 请求异常: ${error.message}`, 'error');
+                log(`   错误详情: ${error.stack}`, 'error');
+                
+                // 检查是否是CORS问题
+                if (error.message.includes('CORS') || error.message.includes('fetch')) {
+                    log('\n🔍 可能的CORS问题检查:', 'info');
+                    log('   - 检查服务器是否设置了正确的CORS头', 'info');
+                    log('   - 检查请求的Origin是否被允许', 'info');
+                    log('   - 检查是否有预检请求(OPTIONS)失败', 'info');
+                }
+            }
+            
+            log('\n🏁 测试完成', 'info');
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const baseUrl = document.getElementById('baseUrl').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!baseUrl || !email || !password) {
+                log('❌ 请填写所有必填字段', 'error');
+                return;
+            }
+            
+            clearLog();
+            await testLogin(baseUrl, email, password);
+        });
+        
+        // 页面加载时显示说明
+        log('📖 前端登录测试工具已就绪', 'info');
+        log('💡 此工具将模拟前端JavaScript的登录请求', 'info');
+        log('🔧 可以检测CORS、网络连接、API响应等问题', 'info');
+        log('📝 点击"测试登录"开始测试\n', 'info');
+    </script>
+</body>
+</html>

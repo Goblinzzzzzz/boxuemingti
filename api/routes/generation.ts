@@ -2,8 +2,8 @@ import express, { type Request, type Response } from 'express';
 import { supabase } from '../services/supabaseClient';
 import { authenticateUser, AuthenticatedRequest } from '../middleware/auth';
 import { aiService } from '../services/aiService';
-import { vercelLogger } from '../vercel-logger';
-import { PerformanceMonitor, enhancedErrorHandler, logMemoryUsage } from '../vercel-optimization';
+// 移除有问题的vercel-logger依赖
+// 移除有问题的vercel-optimization依赖
 import { optimizeMemoryUsage } from '../vercel-compatibility';
 
 const router = express.Router();
@@ -11,22 +11,22 @@ const router = express.Router();
 // Vercel 环境检测和优化
 if (process.env.VERCEL) {
   console.log('🔍 生成路由 - Vercel 环境检测');
-  logMemoryUsage('生成路由初始化');
+  // logMemoryUsage('生成路由初始化');
 }
 
 // 创建生成任务
 router.post('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const taskId = Date.now().toString(36);
-  const monitor = new PerformanceMonitor(`生成任务创建-${taskId}`);
+  // const monitor = new PerformanceMonitor(`生成任务创建-${taskId}`);
   
   try {
     console.log(`[TASK-${taskId}] 开始创建生成任务...`);
-    monitor.checkpoint('请求开始');
+    // monitor.checkpoint('请求开始');
     
     // Vercel 环境内存优化
     if (process.env.VERCEL) {
       optimizeMemoryUsage();
-      logMemoryUsage(`任务创建-${taskId}`);
+      // logMemoryUsage(`任务创建-${taskId}`);
     }
     
     const {
@@ -49,7 +49,7 @@ router.post('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: R
       });
     }
     
-    monitor.checkpoint('参数验证完成');
+    // monitor.checkpoint('参数验证完成');
 
     // 获取教材信息
     console.log(`[TASK-${taskId}] 查询教材信息: ${materialId}`);
@@ -69,7 +69,7 @@ router.post('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: R
     }
     
     console.log(`[TASK-${taskId}] 教材信息获取成功: ${material.title}`);
-    monitor.checkpoint('教材信息获取');
+    // monitor.checkpoint('教材信息获取');
 
     // 创建生成任务
     const { data: task, error: taskError } = await supabase
@@ -97,12 +97,12 @@ router.post('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: R
 
     if (taskError) {
       console.error(`[TASK-${taskId}] 任务创建失败:`, taskError);
-      enhancedErrorHandler(taskError, `任务创建-${taskId}`);
+      console.error(`任务创建错误-${taskId}:`, taskError);
       throw taskError;
     }
     
     console.log(`[TASK-${taskId}] 任务创建成功: ${task.id}`);
-    monitor.checkpoint('任务创建完成');
+    // monitor.checkpoint('任务创建完成');
 
     // 异步开始生成过程，但使用await确保任务开始执行
     console.log(`开始异步生成试题，任务ID: ${task.id}`);
@@ -131,7 +131,7 @@ router.post('/tasks', authenticateUser, async (req: AuthenticatedRequest, res: R
     });
   } catch (error) {
     console.error(`[TASK-${taskId}] 创建生成任务失败:`, error);
-    enhancedErrorHandler(error, `任务创建-${taskId}`);
+    console.error(`任务创建错误-${taskId}:`, error);
     
     if (!res.headersSent) {
       res.status(500).json({

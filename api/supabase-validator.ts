@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './services/supabaseClient';
-import { vercelLogger } from './vercel-logger';
+// 移除有问题的vercel-logger依赖
 
 export interface ValidationResult {
   success: boolean;
@@ -48,7 +48,7 @@ class SupabaseValidator {
    */
   async validateComplete(): Promise<SupabaseValidationReport> {
     const startTime = Date.now();
-    vercelLogger.info(`[${this.validationId}] 开始 Supabase 完整验证`);
+    console.log(`[${this.validationId}] 开始 Supabase 完整验证`);
 
     const report: SupabaseValidationReport = {
       overall: { success: false, message: '', timestamp: new Date().toISOString() },
@@ -96,7 +96,7 @@ class SupabaseValidator {
       
       report.performance.totalTime = Date.now() - startTime;
       
-      vercelLogger.info(`[${this.validationId}] Supabase 验证完成`, {
+      console.log(`[${this.validationId}] Supabase 验证完成`, {
         success: report.overall.success,
         duration: report.performance.totalTime,
         results: {
@@ -109,7 +109,7 @@ class SupabaseValidator {
       });
       
     } catch (error) {
-      vercelLogger.error(`[${this.validationId}] Supabase 验证过程中发生错误`, error);
+      console.error(`[${this.validationId}] Supabase 验证过程中发生错误`, error);
       report.overall = {
         success: false,
         message: `验证过程中发生错误: ${error instanceof Error ? error.message : '未知错误'}`,

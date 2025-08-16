@@ -50,8 +50,8 @@ router.get('/', async (req: Request, res: Response) => {
       // 测试 Supabase 客户端初始化
       debugInfo.checks.databaseConnection.supabaseClient = {
         initialized: !!supabase,
-        url: supabase?.supabaseUrl ? supabase.supabaseUrl.substring(0, 30) + '...' : 'missing',
-        key: supabase?.supabaseKey ? 'present' : 'missing'
+        url: process.env.SUPABASE_URL ? process.env.SUPABASE_URL.substring(0, 30) + '...' : 'missing',
+        key: process.env.SUPABASE_ANON_KEY ? 'present' : 'missing'
       };
 
       // 测试数据库连接

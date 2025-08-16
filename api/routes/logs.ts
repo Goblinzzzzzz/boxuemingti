@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { vercelLogger } from '../vercel-logger';
+// 移除有问题的vercel-logger依赖
 import { authenticateUser, requireAdmin } from '../middleware/auth';
 
 // 内存中的日志存储（生产环境应该使用持久化存储）
